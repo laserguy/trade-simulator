@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-docs.sh\"",
+            "timeout": 120,
+            "statusMessage": "Checking docs match the code..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "_comment": "Models offered in Settings (D9). Prices are USD per 1M tokens, copied from the official pricing pages on as_of; update both when prices change.",
+  "as_of": "2026-09-26",
+  "sources": [
+    "https://developers.openai.com/api/docs/pricing",
+    "https://claude.com/pricing"
+  ],
+  "models": [
+    {"provider": "openai", "model_id": "gpt-6-luna", "label": "GPT-6 Luna", "input": "0.10", "output": "0.50", "note": "Cheapest; default"},
+    {"provider": "openai", "model_id": "gpt-5.4-mini", "label": "GPT-5.4 mini", "input": "0.75", "output": "4.50", "note": "Low cost"},
+    {"provider": "openai", "model_id": "gpt-6-sol", "label": "GPT-6 Sol", "input": "2.00", "output": "10.00", "note": "Balanced"},
+    {"provider": "openai", "model_id": "gpt-6-astra", "label": "GPT-6 Astra", "input": "10.00", "output": "50.00", "note": "Most capable, most expensive"},
+    {"provider": "anthropic", "model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5", "input": "1.00", "output": "5.00", "note": "Fastest, lowest cost"},
+    {"provider": "anthropic", "model_id": "claude-sonnet-5", "label": "Claude Sonnet 5", "input": "2.00", "output": "10.00", "note": "Balanced"},
+    {"provider": "anthropic", "model_id": "claude-opus-5", "label": "Claude Opus 5", "input": "5.00", "output": "25.00", "note": "Most capable, most expensive"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "_comment": "Copy to mcp_servers.json to give the agents MCP tools. Secrets use ${ENV_VAR} and come from backend/.env. 'agents' is any of: research, trading. Only use trusted, vendor-official servers.",
+  "servers": [
+    {
+      "name": "example-stdio-server",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["some-market-data-mcp"],
+      "env": { "SOME_API_KEY": "${SOME_API_KEY}" },
+      "agents": ["research"]
+    },
+    {
+      "name": "example-http-server",
+      "transport": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${EXAMPLE_MCP_TOKEN}" },
+      "agents": ["research"]
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# Shell scripts must keep LF line endings, or bash fails on them (e.g. the Stop hook in .claude/hooks).
+*.sh text eol=lf
