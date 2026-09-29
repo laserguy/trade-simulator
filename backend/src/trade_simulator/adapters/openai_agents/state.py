@@ -12,9 +12,10 @@ class AgentRunState:
 
     budget: RunBudget
     run_config: Any = None
-    hooks: Any = None  # SDK RunHooks for the live timeline (D28), shared with nested Research Agent runs
+    hooks: Any = None  # SDK RunHooks (run_hooks.py), shared with nested Research Agent runs
     model_id: str | None = None
     findings: list[Finding] = field(default_factory=list)
+    tool_urls: set[str] = field(default_factory=set)  # every link a tool returned; only these may be sources (D22)
     input_tokens: int = 0
     output_tokens: int = 0
 

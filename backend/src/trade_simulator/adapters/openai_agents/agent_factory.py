@@ -144,7 +144,7 @@ def _ask_research_agent_tool(research: Agent):
         )
         state.add_usage(result.context_wrapper.usage)
         report: ResearchReport = result.final_output
-        state.findings.extend(to_findings(report.findings))
+        state.findings.extend(to_findings(report.findings, state.tool_urls))
         return report.model_dump_json()
 
     return ask_research_agent

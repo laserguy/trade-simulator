@@ -140,6 +140,12 @@ export interface Settings {
   run_mode: RunModeId
   next_scheduled_run: string | null
   run_mode_estimates: { basis: string; modes: ModeEstimate[] } | null
+  trading_rules: TradingRules
+}
+
+export interface TradingRules {
+  fee_per_trade: string
+  max_position_percent: string
 }
 
 export class ApiError extends Error {

@@ -39,6 +39,19 @@ export function allowanceText(withinAllowance: boolean, lastsTradingDays: number
   )
 }
 
+// The trading rules (D6) in plain words for the Settings card (D29). Fee and cap come from the backend's enforced values.
+export function tradingRuleLines(rules: { fee_per_trade: string; max_position_percent: string }, currency: string): string[] {
+  return [
+    `${formatMoney(rules.fee_per_trade, currency)} broker fee per trade (buy or sell)`,
+    'Whole shares only',
+    `At most ${rules.max_position_percent}% of the portfolio in one stock, checked after each buy`,
+    'No short selling: only shares you hold can be sold',
+    'Buy only watchlist stocks; any stock you hold can be sold',
+    'Cash can never go negative, fees included',
+    'In each run, sells happen before buys, so their cash can fund the buys',
+  ]
+}
+
 export function formatUsdCost(value: string | null): string {
   if (value === null) return DASH
   const number = Number(value)

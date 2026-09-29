@@ -134,6 +134,10 @@
 - **Why:** Finnhub's free quote has today's percent change but no volume, and volume history is a paid feature. A price jump of roughly 8% or more in a day with no explaining news still catches the most common pump-and-dump pattern at zero extra cost. The threshold lives in the Research Agent's prompt, so it is easy to tune.
 - **Alternatives considered:** Paying for volume data (against the cost-first goal); dropping the warning (loses the free safety check).
 
+**Update (2026-09-28): warnings are only for anomalies and missing data**
+- **Why:** In the first real decision run none of the 4 warnings was an anomaly: three were caveats ("figures are approximate", "not independently verified") and one came from the missing tickers (fixed under D40). The prompt never said what a warning is, so every doubt went there. That inflated the "warnings" badge, pushed the Trading Agent (told to treat warnings seriously) away from buying, and would bury a real manipulation warning. A failed tool or missing data stays a warning, because the Trading Agent should know when a stock wasn't actually checked; other caveats go in the summary.
+- **Alternatives considered:** Anomalies only (hides that a stock wasn't checked); a separate "notes" field for caveats (a schema and UI change for little gain).
+
 ### D12: Two agents: Trading Agent (decides) and Research Agent (researches)
 - **Choice:** The Trading Agent owns the portfolio and makes the final call. The Research Agent is called by the Trading Agent, uses the research tools, and reports findings with sources.
 - **Why:**
@@ -142,6 +146,10 @@
   - In the OpenAI Agents SDK, the Research Agent can be exposed to the Trading Agent as a tool (agent-as-tool). The Trading Agent stays in control and can call it more than once.
 - **Alternatives considered:** A single agent doing everything (simpler, but the decision log is less clear); several specialised research agents (closer to the original idea, but more cost; parked under "Multiple agents").
 - **Date:** 2026-09-26
+
+**Update (2026-09-28): the Research Agent never gives a buy, sell or hold verdict**
+- **Why:** In the first real decision run almost every stock finding ended with a verdict such as "does not establish that shares are attractive to buy today". Fourteen of those pushed the Trading Agent towards holding before it had decided anything. The prompt said "You never decide trades" in the role but its reporting rules didn't say what to leave out, so one explicit line was added there.
+- **Alternatives considered:** Also changing how the Trading Agent words its requests (not needed if the Research Agent holds the line itself); removing verdicts from findings in code (brittle text matching).
 
 ### D13: Tight research limits per run
 - **Choice:** At most 3 Research Agent calls and 5 Tavily searches per decision run, enforced in code. Finnhub is not capped beyond its own rate limit.
@@ -256,6 +264,10 @@
 - **Why:** The data is about 15 minutes delayed anyway (D7), so re-fetching a minute later adds little realism. Fetching again would double Finnhub calls per run and risk hitting the free 60 calls/min limit alongside the Research Agent's own calls.
 - **Alternatives considered:** Re-fetching prices just before execution.
 
+**Update (2026-09-28): buttons disabled on click; "run in progress" is not an error**
+- **Why:** The user double-clicked "Run now". The second request arrived while the first run was going, was refused (correctly), and left a red "Another run is still in progress" banner that stayed after the run ended. Disabling both buttons as soon as one is clicked stops the second request. When a run is already going (for example a scheduled one), the page now shows it as in progress, because nothing has gone wrong.
+- **Alternatives considered:** Only clearing the banner when the run ends (the double-click still sends a pointless request); debouncing the click (less direct than disabling).
+
 ### D21: Block decision runs while the market is closed; allow watchlist refresh any time
 - **Choice:** "Run now" is disabled while the market is closed, and "Refresh watchlist" is always available.
 - **Why:**
@@ -280,6 +292,10 @@
 
 **Update (2026-09-26): "OVERALL" and "MARKET" findings**
 - **Why:** A run where the agent decides to hold has no orders, so without its overall reasoning the log wouldn't show *why* it held. Storing it as a special finding reuses the existing log structure instead of adding a new field. A refresh stores the market overview the same way.
+
+**Update (2026-09-28): only links a tool returned are kept as sources**
+- **Why:** The agent writes its `sources` by copying links out of tool results, and nothing checked them. In the first real decision run one Finnhub link came out cut short (a 34-character ID instead of 64), and a made-up link would have got through the same way. The log exists to show real evidence, so during a run the app now remembers every link any tool returned (MCP tools included, D27), and when findings, the market overview and watchlist picks are saved, any other source is dropped. A garbled link disappears rather than being repaired; the finding keeps its other sources.
+- **Alternatives considered:** Short reference tags that the code swaps for full links (fixes the copying itself, but a bigger change across every tool); leaving it (1 bad link in about 40, no effect on trades).
 
 ### D23: Compare returns against the exchange's benchmark index
 - **Choice:** Show the portfolio's return next to the benchmark index's return over the same period (US: S&P 500 via SPY).
@@ -362,6 +378,19 @@
 - **Alternatives considered:** Spending 1–2 of the 5 web searches on market news (uses the scarcest budget); a separate market agent (parked with "multiple agents", D39); putting the headlines straight into the Trading Agent's input (no reasoning about which stocks each event affects, and no sources); social media signals (still parked).
 - **Date:** 2026-09-27
 
+**Update (2026-09-28): the first request names the symbols**
+- **Why:** In the first real decision run the first request asked how market events affect "the watchlist" but named no tickers. The Research Agent sees only the request text, so it reported "no watchlist tickers were included", and the Trading Agent spent a second of its three calls on the stocks, which also produced a second, overlapping MARKET finding. One precise prompt change fixes the cause; if duplicates still appear, they will be handled then.
+- **Alternatives considered:** Having the code attach the whole watchlist to every research request (reliable, but takes away the Trading Agent's choice of which stocks to research in which call, and makes every call cover all of them).
+
+### D41: The Trading Agent is given a goal, not a strategy
+- **Choice:** The Trading Agent's prompt states one goal: beat the S&P 500 (SPY) over time, with holding cash counted as a decision judged against that goal. The line "Prefer holding over trading when evidence is weak" is removed.
+- **Why:**
+  - In the first real decision run (2026-09-28) the agent held all $10,000 in cash, waiting for "a clear buy-today catalyst", and gave avoiding the $1 fee as a reason. The prompt told it to prefer holding but never said what it was trying to achieve, so doing nothing always looked safest. Yet the portfolio is measured against SPY (D23), so staying in cash is also a bet.
+  - **A goal, not a strategy:** how to invest (pace, caution, sizing) is for the agent to work out from its own past runs, which is the D39 roadmap's "agent-written strategies" step. "Prefer holding" was a strategy we had chosen for it.
+  - **Kept minimal:** two sentences, because extra guidance can backfire. Rash trades are still limited by the code-enforced rules (D6), "base decisions on the research" and "do not buy on a manipulation warning".
+- **Alternatives considered:** Adding a "build positions gradually" rule (a strategy; left to the agent); a minimum invested amount (would force buys on days when caution is right); leaving the prompt as it was until more runs had been collected (the bias would likely have shown up in every run).
+- **Date:** 2026-09-28
+
 ---
 
 ## UI design
@@ -373,6 +402,10 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
 - **Why:** The user's point: this is the familiar pattern in apps they use. Configuration is occasional and separate from the day-to-day trading views, so it shouldn't take a tab alongside them. One page also gives room for everything configurable, including the run mode (D3) in step 6.
 - **Alternatives considered:** Settings as a tab (the draft; mixes configuration with content).
 - **Date:** 2026-09-26
+
+**Update (2026-09-29): a read-only "Trading rules" card**
+- **Why:** The user asked how a person would remember rules that live only in the code, such as "buy only watchlist stocks, sell anything you hold". The app never showed them; they appeared only in the docs or when an order was rejected. A short card at the bottom of Settings lists them in plain words. The fee and the per-stock cap come from the same rules object the trade checks use, so the numbers can't drift from the code.
+- **Alternatives considered:** Docs only (easy to forget they exist); a card on Home (the rules rarely change, so they don't belong on the daily view); an info icon next to "Run now" (hidden and awkward for a list).
 
 ### D30: Watchlist as a table, one row per stock
 - **Choice:** Keep the Watchlist tab and show it as a table: symbol, price, today's change, held or not, and the agent's reason with sources.
@@ -388,6 +421,10 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
   - Showing each order's rule result makes "the agent proposes, the code decides" (D20) visible, for example a buy rejected for breaking the 20% cap.
 - **Alternatives considered:** Hiding research and cost behind a "details" link (tidier, but hides the evidence the user wants to see); a flat table of trades (loses the reasoning).
 - **Date:** 2026-09-26
+
+**Update (2026-09-28): a Copy button per run**
+- **Why:** The user wants to paste runs to an AI for analysis. Selecting text by hand misses the full source URLs (only site names are shown) and is awkward across collapsed sections. Plain text works in any chat and is still readable for a person.
+- **Alternatives considered:** Copying JSON (complete but noisy to read); one "Copy all runs" button (too long to paste; one run is the usual unit of analysis).
 
 ### D32: Home screen built around the agent, with a value chart
 - **Choice:** Home shows the three key numbers, a value chart against the S&P 500, the agent's latest decision in its own words, and compact holdings.

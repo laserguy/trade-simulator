@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from trade_simulator.adapters.text_links import merge_sources, split_links
+from trade_simulator.adapters.text_links import keep_known, merge_sources, split_links
 from trade_simulator.core.decision_log import Finding, WatchlistEntry
 from trade_simulator.core.errors import InvalidOrderError
 from trade_simulator.core.order import Order, Side
@@ -63,26 +63,34 @@ def to_orders(decision: TradingDecision) -> tuple[list[Order], list[Finding]]:
     return orders, warnings
 
 
-def to_findings(findings: list[ResearchFinding]) -> list[Finding]:
-    return [_finding(f.symbol.strip().upper(), f.summary, f.sources, tuple(f.warnings)) for f in findings]
+# `known_urls` are the links the tools returned in this run; any other source is dropped (D22).
 
 
-def to_market_overview(result: WatchlistResult) -> Finding:
-    return _finding("MARKET", result.market_overview, result.market_sources)
+def to_findings(findings: list[ResearchFinding], known_urls: set[str]) -> list[Finding]:
+    return [
+        _finding(f.symbol.strip().upper(), f.summary, f.sources, known_urls, tuple(f.warnings)) for f in findings
+    ]
+
+
+def to_market_overview(result: WatchlistResult, known_urls: set[str]) -> Finding:
+    return _finding("MARKET", result.market_overview, result.market_sources, known_urls)
 
 
 def to_decision_summary(decision: TradingDecision) -> Finding:
-    return _finding("OVERALL", decision.summary, [])
+    summary, _ = split_links(decision.summary)
+    return Finding("OVERALL", summary)
 
 
-def to_watchlist_entries(result: WatchlistResult) -> list[WatchlistEntry]:
+def to_watchlist_entries(result: WatchlistResult, known_urls: set[str]) -> list[WatchlistEntry]:
     entries = []
     for pick in result.picks:
         reason, urls = split_links(pick.reason)
-        entries.append(WatchlistEntry(pick.symbol, reason, merge_sources(pick.sources, urls)))
+        entries.append(WatchlistEntry(pick.symbol, reason, keep_known(merge_sources(pick.sources, urls), known_urls)))
     return entries
 
 
-def _finding(symbol: str, text: str, sources: list[str], warnings: tuple[str, ...] = ()) -> Finding:
+def _finding(
+    symbol: str, text: str, sources: list[str], known_urls: set[str], warnings: tuple[str, ...] = ()
+) -> Finding:
     summary, urls = split_links(text)
-    return Finding(symbol, summary, merge_sources(sources, urls), warnings)
+    return Finding(symbol, summary, keep_known(merge_sources(sources, urls), known_urls), warnings)

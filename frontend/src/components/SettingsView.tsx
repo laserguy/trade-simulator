@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, type ProviderStatus, type Settings } from '../api'
+import { tradingRuleLines } from '../format'
 import { RunModeSection } from './RunModeSection'
 
 const PROVIDER_LABEL: Record<string, string> = { openai: 'OpenAI', anthropic: 'Anthropic' }
@@ -7,11 +8,12 @@ const PROVIDER_LABEL: Record<string, string> = { openai: 'OpenAI', anthropic: 'A
 interface Props {
   settings: Settings | null
   timezone: string
+  currency: string
   onChange: (settings: Settings) => void
   onError: (message: string) => void
 }
 
-export function SettingsView({ settings, timezone, onChange, onError }: Props) {
+export function SettingsView({ settings, timezone, currency, onChange, onError }: Props) {
   if (!settings) return <p className="muted">Loading settings…</p>
 
   const save = async (action: Promise<Settings>) => {
@@ -91,6 +93,18 @@ export function SettingsView({ settings, timezone, onChange, onError }: Props) {
       </div>
 
       <RunModeSection settings={settings} timezone={timezone} onSelect={(mode) => save(api.setRunMode(mode))} />
+
+      <div className="card">
+        <h2>Trading rules</h2>
+        <p className="muted" style={{ marginTop: 0, fontSize: 14 }}>
+          Checked by the app on every order the agent proposes; orders that break them are rejected and logged.
+        </p>
+        <ul className="rules">
+          {tradingRuleLines(settings.trading_rules, currency).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </div>
     </>
   )
 }

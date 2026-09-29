@@ -39,6 +39,7 @@ from trade_simulator.adapters.text_links import merge_sources, split_links
 from trade_simulator.core.decision_log import DecisionRun, Finding, RunTrigger
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.model_pricing import ModelCatalogue
+from trade_simulator.core.trading_rules import TradingRules
 
 logger = logging.getLogger(__name__)
 TRACE_URL = "https://platform.openai.com/traces/trace?trace_id={}"
@@ -408,7 +409,17 @@ def _settings_json(services: WebServices, schedule: Schedule) -> dict:
         "run_mode": mode.value,
         "next_scheduled_run": next_run.isoformat() if next_run else None,
         "run_mode_estimates": _estimates_json(services),
+        "trading_rules": _trading_rules_json(services.profile),
         **_keys_and_models_json(view),
+    }
+
+
+def _trading_rules_json(profile: ExchangeProfile) -> dict:
+    """The values the trade checks use (D6), so the Settings card can't drift from the code (D29)."""
+    rules = TradingRules.for_exchange(profile)
+    return {
+        "fee_per_trade": _money(rules.fee_per_trade),
+        "max_position_percent": format((rules.max_position_fraction * 100).normalize(), "f"),
     }
 
 

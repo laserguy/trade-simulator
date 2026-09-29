@@ -29,6 +29,11 @@
 .banner.warn { background: var(--warn-bg); color: var(--warn-text); }
 .banner.error { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
 .banner.info { background: var(--surface-2); color: var(--muted); }
+.banner.closable { display: flex; align-items: center; gap: 12px; }
+.banner.closable > span { flex: 1; }
+.banner-close { background: none; border: 0; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; opacity: 0.7; }
+.banner-close:hover { opacity: 1; }
+.rules { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.8; }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
   box-shadow: var(--shadow); margin-bottom: 16px; }

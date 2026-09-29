@@ -332,6 +332,12 @@ def test_run_mode_defaults_to_manual_with_no_scheduled_run(client):
     assert body["run_mode_estimates"] is None  # no AI key yet, so no model to price
 
 
+def test_settings_show_the_enforced_trading_rules(client):
+    rules = client.get("/api/settings").json()["trading_rules"]
+
+    assert rules == {"fee_per_trade": "1.00", "max_position_percent": "20"}
+
+
 def test_choosing_a_run_mode_shows_next_run_and_estimates(client):
     client.put("/api/settings/keys/openai", json={"api_key": "sk-test-1"})
 

@@ -23,6 +23,7 @@ from trade_simulator.adapters.openai_agents.schemas import (
     to_orders,
     to_watchlist_entries,
 )
+from trade_simulator.adapters.openai_agents.run_hooks import AgentRunHooks
 from trade_simulator.adapters.openai_agents.state import AgentRunState
 from trade_simulator.adapters.openai_agents.timeline_hooks import TimelineHooks
 from trade_simulator.adapters.openai_agents.toolbox import ResearchToolbox
@@ -58,7 +59,7 @@ class OpenAITradingAgents:
         self._prompts = prompts
         self._profile = profile
         self._mcp_servers = mcp_servers
-        self._hooks = TimelineHooks(activity) if activity else None
+        self._hooks = AgentRunHooks(TimelineHooks(activity) if activity else None)
 
     async def decide(self, context: DecisionContext) -> AgentDecision:
         agents, state = self._prepare(context.limits)
@@ -82,8 +83,8 @@ class OpenAITradingAgents:
         )
         result: WatchlistResult
         return WatchlistProposal(
-            entries=tuple(to_watchlist_entries(result)),
-            findings=(to_market_overview(result),),
+            entries=tuple(to_watchlist_entries(result, state.tool_urls)),
+            findings=(to_market_overview(result, state.tool_urls),),
             usage=state.usage(),
             trace_id=trace_id,
         )

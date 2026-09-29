@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, signClass, tokens } from './format'
+import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, signClass, tokens, tradingRuleLines } from './format'
+
+describe('tradingRuleLines', () => {
+  it('states every rule in plain words, with the enforced fee and cap', () => {
+    expect(tradingRuleLines({ fee_per_trade: '1.00', max_position_percent: '20' }, 'USD')).toEqual([
+      '$1.00 broker fee per trade (buy or sell)',
+      'Whole shares only',
+      'At most 20% of the portfolio in one stock, checked after each buy',
+      'No short selling: only shares you hold can be sold',
+      'Buy only watchlist stocks; any stock you hold can be sold',
+      'Cash can never go negative, fees included',
+      'In each run, sells happen before buys, so their cash can fund the buys',
+    ])
+  })
+})
 
 describe('formatMoney', () => {
   it('formats with thousands separators and currency', () => {

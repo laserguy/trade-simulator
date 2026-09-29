@@ -37,6 +37,8 @@ export default function App() {
   const [activity, setActivity] = useState<Activity | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const startingRef = useRef(false)
   const wasRunning = useRef(false)
 
   const loadData = useCallback(async () => {
@@ -84,19 +86,33 @@ export default function App() {
     }
   }, [loadData])
 
+  const showRunning = () => {
+    wasRunning.current = true
+    setStatus((s) => (s ? { ...s, run_in_progress: true } : s))
+    setPage('log')
+  }
+
+  // Buttons are disabled from the click on, so a double-click can't send a second request (D20).
   const start = async (action: () => Promise<unknown>) => {
+    if (startingRef.current) return
+    startingRef.current = true
+    setStarting(true)
     setError(null)
     try {
       await action()
-      wasRunning.current = true
-      setStatus((s) => (s ? { ...s, run_in_progress: true } : s))
-      setPage('log')
+      showRunning()
     } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : 'Request failed')
+      // Refused because a run is already going: that's not an error, just show the run (D20).
+      const busy = e instanceof ApiError && e.status === 409 && (await api.status().catch(() => null))?.run_in_progress
+      if (busy) showRunning()
+      else setError(e instanceof ApiError || e instanceof Error ? e.message : 'Request failed')
+    } finally {
+      startingRef.current = false
+      setStarting(false)
     }
   }
 
-  const running = status?.run_in_progress ?? false
+  const running = (status?.run_in_progress ?? false) || starting
   const marketOpen = status?.market_open ?? false
   const noModel = settings !== null && settings.selected_model_id === null
   const currency = status?.currency ?? 'USD'
@@ -151,7 +167,14 @@ export default function App() {
         </div>
       )}
       {offline && <div className="banner error">Backend not reachable. Is `uv run trade-sim serve` running?</div>}
-      {error && <div className="banner error">{error}</div>}
+      {error && (
+        <div className="banner error closable">
+          <span>{error}</span>
+          <button className="banner-close" aria-label="Close" title="Close" onClick={() => setError(null)}>
+            ×
+          </button>
+        </div>
+      )}
 
       {page === 'settings' ? (
         <>
@@ -162,6 +185,7 @@ export default function App() {
           <SettingsView
             settings={settings}
             timezone={status?.timezone ?? 'America/New_York'}
+            currency={currency}
             onChange={setSettings}
             onError={setError}
           />

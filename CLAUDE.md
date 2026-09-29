@@ -6,7 +6,7 @@
 - [ARCHITECTURE.md](ARCHITECTURE.md): where things are in the code (layers, decision → file map, config, tables, endpoints, how to add a provider). Keep it current when files, tables, endpoints or settings change.
 
 ## Rules
-- Read PROBLEM_STATEMENT.md and WHY.md before designing or writing code, and ARCHITECTURE.md before changing code. Stay within the current scope.
+- Before designing or writing code, read the decision table in PROBLEM_STATEMENT.md to find the D#s the task touches, then read only those `### D#:` entries in WHY.md. Read ARCHITECTURE.md in full before changing code. Skip the decision lookup for small fixes (typos, styling, obvious bugs) that touch no decision. Stay within the current scope.
 - When a decision is made or changed, update **both** files in the same step:
   - `PROBLEM_STATEMENT.md`: add or edit the D# row and add a Changelog line with the date.
   - `WHY.md`: add or edit the D# entry (choice, why, alternatives considered, date).

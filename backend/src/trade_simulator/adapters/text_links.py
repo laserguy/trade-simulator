@@ -34,3 +34,17 @@ def split_links(text: str) -> tuple[str, list[str]]:
 def merge_sources(*groups) -> tuple[str, ...]:
     """Combine source lists, keeping the first occurrence of each URL."""
     return tuple(dict.fromkeys(url for group in groups for url in group if url))
+
+
+_URL_IN_OUTPUT = re.compile(r"https?://[^\s\"'<>\\]+")
+
+
+def find_urls(text: str) -> set[str]:
+    """Every link in a tool's output (JSON or prose)."""
+    return {url.rstrip(".,;:)]") for url in _URL_IN_OUTPUT.findall(text)}
+
+
+def keep_known(sources: tuple[str, ...], known: set[str]) -> tuple[str, ...]:
+    """Keep only sources a tool actually returned in this run (D22). Agents copy links by hand and can garble them."""
+    known_normalised = {url.rstrip("/") for url in known}
+    return tuple(url for url in sources if url.rstrip("/") in known_normalised)

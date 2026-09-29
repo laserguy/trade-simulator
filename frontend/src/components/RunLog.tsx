@@ -1,12 +1,8 @@
+import { useState } from 'react'
+import type { MouseEvent } from 'react'
 import type { Finding, Run } from '../api'
 import { duration, formatDateTime, formatMoney, formatUsdCost, tokens } from '../format'
-
-const TRIGGER_LABEL: Record<Run['trigger'], string> = {
-  manual: 'Run now',
-  daily: 'Daily',
-  every_15_min: 'Every 15 min',
-  refresh: 'Watchlist refresh',
-}
+import { runAsText, TRIGGER_LABEL } from '../runText'
 
 export function RunLog({ runs, currency }: { runs: Run[]; currency: string }) {
   if (runs.length === 0) {
@@ -47,6 +43,7 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
         </span>
         {warnings > 0 && <span className="warning">{warnings} warning{warnings > 1 ? 's' : ''}</span>}
         <span className="muted num">{duration(run.started_at, run.finished_at)}</span>
+        <CopyButton text={() => runAsText(run, currency)} />
       </summary>
 
       <div className="body">
@@ -120,6 +117,27 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
         </div>
       </div>
     </details>
+  )
+}
+
+// Sits inside <summary>, so the click must not open or close the row.
+function CopyButton({ text }: { text: () => string }) {
+  const [label, setLabel] = useState('Copy')
+  const copy = async (e: MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(text())
+      setLabel('Copied ✓')
+    } catch {
+      setLabel('Copy failed')
+    }
+    setTimeout(() => setLabel('Copy'), 1500)
+  }
+  return (
+    <button className="btn small" onClick={copy} title="Copy this run as text">
+      {label}
+    </button>
   )
 }
 

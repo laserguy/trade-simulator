@@ -30,12 +30,13 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D10, D34 web search | `adapters/tavily_search.py` (implements `WebSearch`) |
 | D11, D12 agents and their roles | `adapters/openai_agents/agent_factory.py`, `trading_agents.py`, `toolbox.py`, `schemas.py` (structured outputs), `inputs.py` (the text each agent run starts from), `state.py` (per-run state: budget, usage, findings), `backend/prompts/*.md` |
 | D40 market context in research | `adapters/finnhub_market_data.py` (`market_news`), `toolbox.py` and `agent_factory.py` (`get_market_news` tool), `application/ports.py` (`MarketOverview`, `Repository.latest_market_overview`), `application/run_decision.py`, `inputs.py`, `backend/prompts/*.md` |
+| D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |
 | D20 runs never overlap | `application/run_guard.py`, `application/run_decision.py` |
 | D21 market hours | `adapters/exchange_calendar.py` (implements `MarketCalendar`) |
-| D22 decision log records | `core/decision_log.py`, `application/run_cost.py`, `adapters/text_links.py` |
+| D22 decision log records | `core/decision_log.py`, `application/run_cost.py`, `adapters/text_links.py`; sources checked against the links tools returned: `adapters/openai_agents/run_hooks.py` (collects them), `schemas.py` (drops the rest) |
 | D23, D33 benchmark and value history | `application/portfolio_view.py`, `application/value_history.py` |
 | D25 prompts and tracing | `adapters/openai_agents/prompts.py`, `trading_agents.py` |
 | D27 MCP servers | `adapters/openai_agents/mcp_config.py`, `backend/mcp_servers.example.json` |
@@ -43,7 +44,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D3, D35 run mode, scheduler, cost estimate | `application/run_mode.py`, `schedule.py`, `scheduler.py`, `run_cost_estimate.py`, `frontend/src/components/RunModeSection.tsx` |
 | D36 price history | `application/price_history.py`, `adapters/tiingo_price_history.py` (implements `PriceHistorySource`) |
 | D30 watchlist view | `application/watchlist_view.py` (watchlist with quotes and held flag) |
-| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers) and `format.ts` (money, percentages, exchange times) |
+| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers), `format.ts` (money, percentages, exchange times) and `runText.ts` (a run as plain text for the Decision log's Copy button) |
 
 ## Config (`backend/.env`, see `.env.example`)
 
