@@ -1,14 +1,21 @@
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from agents.mcp import MCPServerStdio
+from agents.tool_context import ToolContext
 
+from trade_simulator.adapters.openai_agents import agent_factory
 from trade_simulator.adapters.openai_agents.agent_factory import AgentModels, build_agents
 from trade_simulator.adapters.openai_agents.mcp_config import McpServers
 from trade_simulator.adapters.openai_agents.prompts import PromptLibrary
+from trade_simulator.adapters.openai_agents.schemas import ResearchReport
+from trade_simulator.adapters.openai_agents.state import AgentRunState
 from trade_simulator.adapters.openai_agents.toolbox import ResearchToolbox
 from trade_simulator.core.errors import ConfigError
 from trade_simulator.core.exchange_profile import US_PROFILE
+from trade_simulator.core.run_budget import DECISION_RUN_LIMITS, RunBudget
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
 
@@ -52,6 +59,25 @@ def test_agents_get_their_tools_and_model():
     assert trading_tools == {"ask_research_agent"}
     assert research_tools == {"get_quotes", "get_company_news", "get_market_news", "get_key_metrics", "web_search"}
     assert agents.trading.model == agents.research.model == "gpt-6-luna"
+
+
+def test_every_research_request_carries_the_holdings_note(monkeypatch):
+    requests = []
+
+    async def fake_run(agent, request, **kwargs):
+        requests.append(request)
+        usage = SimpleNamespace(input_tokens=1, output_tokens=1)
+        return SimpleNamespace(final_output=ResearchReport(findings=[]), context_wrapper=SimpleNamespace(usage=usage))
+
+    monkeypatch.setattr(agent_factory.Runner, "run", fake_run)
+    state = AgentRunState(budget=RunBudget(DECISION_RUN_LIMITS), research_note="Current holdings…")
+    [ask_research_agent] = make_agents().trading.tools
+    arguments = '{"request": "Check AAPL"}'
+    context = ToolContext(context=state, tool_name="ask_research_agent", tool_call_id="call-1", tool_arguments=arguments)
+
+    asyncio.run(ask_research_agent.on_invoke_tool(context, arguments))
+
+    assert requests == ["Check AAPL\n\nCurrent holdings…"]
 
 
 def test_each_agent_can_get_its_own_model_for_later_agent_specific_choice():

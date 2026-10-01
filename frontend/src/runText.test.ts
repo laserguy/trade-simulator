@@ -10,12 +10,14 @@ const baseRun: Run = {
   finished_at: '2026-09-28T14:39:10+00:00',
   failure_reason: null,
   findings: [
-    { symbol: 'OVERALL', summary: 'Holding cash.', sources: [], warnings: [] },
+    { symbol: 'OVERALL', summary: 'Holding cash.', sources: [], warnings: [], price: null, change_percent: null },
     {
       symbol: 'NVDA',
       summary: 'Jumped with no news.',
       sources: ['https://www.example.com/nvda'],
       warnings: ['Up 9% with no matching news'],
+      price: '230.25',
+      change_percent: '9.1',
     },
   ],
   orders: [
@@ -64,7 +66,7 @@ describe('runAsText', () => {
         trigger: 'refresh',
         status: 'failed',
         failure_reason: 'Model timed out',
-        findings: [{ symbol: 'MARKET', summary: 'Oil shock.', sources: [], warnings: [] }],
+        findings: [{ symbol: 'MARKET', summary: 'Oil shock.', sources: [], warnings: [], price: null, change_percent: null }],
         trace_url: null,
       },
       'USD',

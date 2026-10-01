@@ -20,6 +20,12 @@ export function signClass(value: string | null): '' | 'up' | 'down' {
   return number > 0 ? 'up' : number < 0 ? 'down' : ''
 }
 
+// Colour of a price-change chip (D31). A change under 0.05% counts as flat, so -0.01% isn't shown as a fall.
+export function moveTone(changePercent: string): 'up' | 'down' | 'flat' {
+  const number = Number(changePercent)
+  return Math.abs(number) < 0.05 ? 'flat' : number > 0 ? 'up' : 'down'
+}
+
 export function comparisonText(agentReturn: string | null, benchmarkReturn: string | null, benchmark: string): string {
   if (agentReturn === null || benchmarkReturn === null) return 'Comparison unavailable'
   const gap = Number(agentReturn) - Number(benchmarkReturn)

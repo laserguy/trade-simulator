@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { Finding, Run } from '../api'
-import { duration, formatDateTime, formatMoney, formatUsdCost, tokens } from '../format'
+import { duration, formatDateTime, formatMoney, formatPercent, formatUsdCost, moveTone, tokens } from '../format'
+import { runSections } from '../runSections'
 import { runAsText, TRIGGER_LABEL } from '../runText'
 
-export function RunLog({ runs, currency }: { runs: Run[]; currency: string }) {
+// `openRunId` expands that run and scrolls to it (a marker on the Home chart, D32); otherwise the newest is open.
+export function RunLog({ runs, currency, openRunId = null }: { runs: Run[]; currency: string; openRunId?: string | null }) {
+  useEffect(() => {
+    if (openRunId) document.getElementById(`run-${openRunId}`)?.scrollIntoView({ block: 'start' })
+  }, [openRunId])
+
   if (runs.length === 0) {
     return (
       <div className="card">
@@ -15,7 +21,7 @@ export function RunLog({ runs, currency }: { runs: Run[]; currency: string }) {
   return (
     <>
       {runs.map((run, index) => (
-        <RunItem key={run.id} run={run} currency={currency} open={index === 0} />
+        <RunItem key={run.id} run={run} currency={currency} open={openRunId ? run.id === openRunId : index === 0} />
       ))}
     </>
   )
@@ -25,11 +31,10 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
   const executed = run.orders.filter((o) => o.status === 'executed').length
   const rejected = run.orders.length - executed
   const warnings = run.findings.reduce((n, f) => n + f.warnings.length, 0)
-  const overall = run.findings.find((f) => f.symbol === 'OVERALL' || f.symbol === 'MARKET')
-  const research = run.findings.filter((f) => f !== overall)
+  const { decision, market, orders, other } = runSections(run)
 
   return (
-    <details className="run" open={open}>
+    <details className="run" id={`run-${run.id}`} open={open}>
       <summary>
         <span className="when">{formatDateTime(run.started_at)}</span>
         <span className="badge">{TRIGGER_LABEL[run.trigger]}</span>
@@ -48,56 +53,66 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
 
       <div className="body">
         {run.failure_reason && <div className="banner error" style={{ marginTop: 12 }}>{run.failure_reason}</div>}
-        {overall && (
+        {decision && (
           <>
-            <h3>{overall.symbol === 'MARKET' ? 'Market overview' : 'Decision summary'}</h3>
-            <p style={{ margin: 0 }}>{overall.summary}</p>
-            <SourceLinks sources={overall.sources} />
+            <h3>Decision summary</h3>
+            <p style={{ margin: 0 }}>{decision.summary}</p>
+            <SourceLinks sources={decision.sources} />
           </>
         )}
 
-        {run.orders.length > 0 && (
+        {orders.length > 0 && (
           <>
             <h3>Orders</h3>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Reason</th>
-                    <th>Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {run.orders.map((o, i) => (
-                    <tr key={i}>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <span className={`badge ${o.side}`}>{o.side.toUpperCase()}</span> {o.quantity} <strong>{o.symbol}</strong>
-                      </td>
-                      <td>{o.reason}</td>
-                      <td>
-                        <span className={`badge ${o.status}`}>{o.status}</span>{' '}
-                        {o.status === 'executed' ? (
-                          <span className="muted num">
-                            at {formatMoney(o.price, currency)} + {formatMoney(o.fee, currency)} fee
-                          </span>
-                        ) : (
-                          <span className="muted">{o.rejection_reason}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {orders.map(({ order: o, evidence }, i) => (
+              <div className={`order ${o.status === 'rejected' ? 'rejected' : o.side}`} key={i}>
+                <div className="order-head">
+                  <span className={`badge ${o.side}`}>{o.side.toUpperCase()}</span>
+                  <span>
+                    {o.quantity} <strong>{o.symbol}</strong>
+                  </span>
+                  <QuoteChip finding={run.findings.find((f) => f.symbol === o.symbol && f.price !== null)} currency={currency} />
+                  <span className={`badge ${o.status}`}>{o.status}</span>
+                  {o.status === 'executed' ? (
+                    <span className="muted num">
+                      at {formatMoney(o.price, currency)} + {formatMoney(o.fee, currency)} fee
+                    </span>
+                  ) : (
+                    <span className="muted">{o.rejection_reason}</span>
+                  )}
+                </div>
+                <div>{o.reason}</div>
+                {evidence.map((f, j) => (
+                  <div className="evidence" key={j}>
+                    <span className="muted">Research: </span>
+                    {f.summary}
+                    <Warnings warnings={f.warnings} />
+                    <SourceLinks sources={f.sources} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        )}
+
+        {market && (
+          <>
+            <h3>Market overview</h3>
+            <div className="market">
+              {market.summary}
+              <Warnings warnings={market.warnings} />
+              <SourceLinks sources={market.sources} />
             </div>
           </>
         )}
 
-        {research.length > 0 && (
+        {other.length > 0 && (
           <>
-            <h3>Research findings</h3>
-            {research.map((f, i) => (
-              <FindingRow key={i} finding={f} />
+            <h3>
+              {orders.length > 0 ? 'Other stocks researched' : 'Stocks researched'} ({other.length})
+            </h3>
+            {other.map((f, i) => (
+              <FindingRow key={i} finding={f} currency={currency} />
             ))}
           </>
         )}
@@ -141,18 +156,30 @@ function CopyButton({ text }: { text: () => string }) {
   )
 }
 
-function FindingRow({ finding }: { finding: Finding }) {
+// One line when closed; a finding with a warning starts open so the warning isn't hidden.
+function FindingRow({ finding, currency }: { finding: Finding; currency: string }) {
   return (
-    <div className="finding">
-      <span className="sym">{finding.symbol}</span>
-      {finding.summary}
-      {finding.warnings.map((w, i) => (
+    <details className="finding" open={finding.warnings.length > 0}>
+      <summary>
+        <span className="sym">{finding.symbol}</span>
+        <QuoteChip finding={finding} currency={currency} />
+        {finding.summary}
+      </summary>
+      <Warnings warnings={finding.warnings} />
+      <SourceLinks sources={finding.sources} />
+    </details>
+  )
+}
+
+function Warnings({ warnings }: { warnings: string[] }) {
+  return (
+    <>
+      {warnings.map((w, i) => (
         <div key={i}>
           <span className="warning">⚠ {w}</span>
         </div>
       ))}
-      <SourceLinks sources={finding.sources} />
-    </div>
+    </>
   )
 }
 
@@ -175,4 +202,18 @@ function hostname(url: string): string {
   } catch {
     return url
   }
+}
+
+// The stock's price and day change when the agent looked it up; nothing for runs saved before these were recorded.
+function QuoteChip({ finding, currency }: { finding: Finding | undefined; currency: string }) {
+  if (!finding || finding.price === null || finding.change_percent === null) return null
+  return (
+    <span
+      className={`chip num ${moveTone(finding.change_percent)}`}
+      title="Price when the agent checked, and its change from the previous day's close."
+    >
+      <span className="px">{formatMoney(finding.price, currency)}</span>
+      {formatPercent(finding.change_percent)}
+    </span>
+  )
 }

@@ -297,6 +297,10 @@
 - **Why:** The agent writes its `sources` by copying links out of tool results, and nothing checked them. In the first real decision run one Finnhub link came out cut short (a 34-character ID instead of 64), and a made-up link would have got through the same way. The log exists to show real evidence, so during a run the app now remembers every link any tool returned (MCP tools included, D27), and when findings, the market overview and watchlist picks are saved, any other source is dropped. A garbled link disappears rather than being repaired; the finding keeps its other sources.
 - **Alternatives considered:** Short reference tags that the code swaps for full links (fixes the copying itself, but a bigger change across every tool); leaving it (1 bad link in about 40, no effect on trades).
 
+**Update (2026-09-30): each finding saves the stock's price and day change**
+- **Why:** The Decision log shows a coloured price chip per stock (D31), which needs the numbers as data. Until now they existed only inside the agent's sentence. The app remembers the quotes the quote tool returned during the run and attaches them when findings are saved, so the numbers are the tool's, not the agent's retelling.
+- **Alternatives considered:** Reading the price out of the summary text (breaks whenever the agent words it differently); asking the agent to return price fields (it can miscopy them, as it did with a link).
+
 ### D23: Compare returns against the exchange's benchmark index
 - **Choice:** Show the portfolio's return next to the benchmark index's return over the same period (US: S&P 500 via SPY).
 - **Why:**
@@ -391,6 +395,98 @@
 - **Alternatives considered:** Adding a "build positions gradually" rule (a strategy; left to the agent); a minimum invested amount (would force buys on days when caution is right); leaving the prompt as it was until more runs had been collected (the bias would likely have shown up in every run).
 - **Date:** 2026-09-28
 
+### D42: The Trading Agent is told why it holds each stock and how it is doing
+- **Choice:** At the start of every decision run the agent's input includes, for each holding, its gain or loss on cost and each buy behind the current position with the reason given then; plus one line with the portfolio's return and SPY's since tracking began. A lookup tool for deeper history is a second phase, decided after a few runs.
+- **Why:**
+  - The agent started every run with no memory: it saw what it held but not why it bought it, and not whether it was beating SPY, which is its goal (D41). It could not ask "is my reason for owning this still true?".
+  - **Always included, not behind a tool:** this is needed on every run and is only a few lines. Behind a tool, the cheapest model would sometimes not ask and decide blind, and each call costs an extra model turn.
+  - **Exact:** the app reads the trades and reasons from the database (`order_results`); no model recalls or summarises them.
+  - **Facts, not a strategy (D41):** the agent gets its own record and one line asking it to check its reasons. What to do about it stays the agent's call.
+  - **The user asked for a tool** the agent can choose to use. That fits the larger, occasional data (closed positions, rejected orders), so it is kept as phase 2 and built only if phase 1 is not enough.
+- **Cost:** a few lines per holding on every run, well under a tenth of a cent on the default model. One more price lookup per run (SPY).
+- **Alternatives considered:** Tool only (the agent may not call it); carrying over earlier research findings (much more text per run; the reason is the part that matters); no memory (the state before this).
+- **Date:** 2026-09-30
+
+**Update (2026-09-30): the Research Agent gets the reasons too**
+- **Choice:** The app adds the holdings and the reason each was bought to every research request in a decision run, ending with: report the facts that bear on these reasons; the Trading Agent judges.
+- **Why:**
+  - The Research Agent sees only the request the Trading Agent writes. In run 2026-09-30 13:55 the Trading Agent asked whether any thesis had broken without saying what the theses were. The Research Agent noted they "were not provided" and still wrote "no material change to the thesis" on all 15 stocks, and the Trading Agent held on that answer.
+  - **Done by the app, not by a prompt line:** it then happens on every request, and the reasons are exact. Asking the Trading Agent to pass them on would depend on the cheapest model complying (see PROMPT_LOG.md).
+  - **Facts only (D12):** the closing sentence keeps the judgement with the Trading Agent.
+- **Alternatives considered:** A prompt line telling the Trading Agent to include the reasons (unreliable); leaving the Research Agent without them (it cannot check a reason it was never given).
+
+### D43: The Trading Agent writes and revises its own strategy, in a separate review
+- **Choice:** The Trading Agent owns its strategy. It writes and revises it in a **strategy review**, a step separate from the trading run, with its own prompt file and the same model; trading runs follow the current version. The code computes each version's results and the agent judges them. No evaluator agent and no internet search for strategies for now. Being designed one decision at a time; not built.
+- **Why:**
+  - **The agent that follows the strategy should write it.** It explains each trade against the strategy, so it is accountable for both. If another agent wrote it, a bad result could be blamed on the strategy or on how it was followed, with no way to tell which. This also matches D41: how to invest is for the agent to develop.
+  - **Fits multiple agents later (D39):** each competing agent should be judged on its own thinking, strategy included. A separate strategist would need one copy per agent on the same model, or the comparison gets muddied.
+  - **A separate review, not inside every trading run:** each version then runs unchanged for a stretch, so its results can be judged; a strategy changed every run can't be. It also keeps the trading run short (D20).
+  - **Self-grading bias is limited by facts:** return against SPY, trades won and lost, fees and cash held are computed by the code, so the agent can't tell itself a better story. An evaluator agent on the same model would share the agent's blind spots; on another model it adds cost and another thing to debug; and with only weeks of data no one can judge well. The user can see every version and its results.
+  - **No strategy search:** the model already knows the standard strategies (momentum, value, mean reversion, sector rotation) from training; searching would mostly return the same ideas, often from hype articles. It would use the free search allowance (D34, D35) and bend D12, since strategy articles are advice, not facts. What the model can't know is its own record, which the app supplies.
+- **Alternatives considered:** A separate strategy agent (splits accountability; muddies the multi-agent comparison); revising the strategy inside each trading run (nothing could be judged); an evaluator agent now (parked: if added, it only writes a critique the Trading Agent reads, triggered by self-defence in about three reviews); internet search for strategies (parked: revisit if strategies look thin or repetitive).
+- **Date:** 2026-10-01
+
+**Update (2026-10-01): when reviews happen**
+- **Choice:** The first strategy comes from a "Review strategy" button (or automatically if a trading run finds none). Each version then runs at least 10 trading days and 5 trading runs before any review; after that, a weekly scheduled review (Friday after the close) or the button. A review may keep the strategy. No override; both minimums are code settings.
+- **Why:**
+  - A strategy needs time to show results; reviewing it again and again adds noise and cost, not information (the user's point).
+  - **Both minimums:** days alone don't work across run modes (Manual may run once a week, 15-minute mode about 26 times a day), so a version needs both time and real decisions to judge.
+  - **Schedule and button:** the schedule keeps reviews regular so versions get comparable stretches; the button covers the first strategy.
+  - **No override:** a sharp market move is when an impulsive rewrite is most tempting.
+- **Alternatives considered:** Schedule only (no way to write the first strategy on demand); button only (irregular reviews); a day minimum alone or a run minimum alone; an emergency override.
+
+**Update (2026-10-01): what a strategy contains**
+- **Choice:** Plain words in five fixed sections: *What I look for*, *Position size*, *When I sell*, *Cash and pace*, *How I'll know it's working*. About 60 words per section (a code setting). Guidance only; D6 stays the only enforced rules.
+- **Why:**
+  - **Comparable versions:** a change reads section by section ("sizing went from 15% to 8% because…"), not as two essays.
+  - **Traceable trades:** a trading run can name the section each order follows.
+  - **The test is set before the results:** "How I'll know it's working" is checked at the next review against the code's numbers, so the agent can't move the goalposts afterwards. This limits self-grading bias.
+  - **Word limit:** keeps the strategy specific and cheap to include in every trading run.
+- **Alternatives considered:** Free text (vague, hard to compare); numbers enforced by code (turns the strategy into rules, mixes with D6, and limits the agent to the fields we thought of).
+
+**Update (2026-10-01): what the review is given, and where history is stored**
+- **Choice:** The goal, rules, portfolio, watchlist and latest market overview; for an existing version also the current strategy, a code-computed scorecard for its period, every order with its reason, and all previous versions (the previous one in full, older ones compact) with the reasons for each change or keep. No research findings or Research Agent calls. Stored in two new tables, `strategy_versions` and `strategy_reviews`, with each trading run recording the version it followed.
+- **Why:**
+  - **All previous versions, with their reasons** (the user's point): the agent sees what it already tried, why it dropped it, and whether the replacement did better, so it doesn't go round in circles. "Keep" decisions teach as much as changes.
+  - **Cost stays small:** about 500 words per version, at most one review every two weeks.
+  - **Exact:** the scorecard is computed by code and the reasons are read from the database, as in D42.
+  - **No research:** the review is about its own record; the reasons on each order already capture what mattered, and no web searches are used.
+  - **Scorecard saved, not recomputed:** the history shows exactly what the agent saw when it decided, even if a calculation changes later.
+  - **Version on each run:** lets the code count the runs per version (the 5-run minimum) and build each version's scorecard.
+- **Alternatives considered:** Only the last two versions (loses older lessons); every version in full (grows faster for little gain); letting the review call the Research Agent (costs searches, off the point); recomputing scorecards on demand (history could drift from what the agent saw).
+
+**Update (2026-10-01): what the review returns**
+- **Choice:** A verdict on the last prediction, whether the strategy was followed, keep or change, a reason, and if changed the full new version with one sentence per changed section. Checked by code before saving; on failure nothing is saved and the review is logged as failed.
+- **Why:**
+  - **"Was it followed?"** separates a bad strategy from one that wasn't followed, which the self-grading concern needs.
+  - **Verdict first,** against the scorecard, so the agent judges the old version before defending or replacing it.
+  - **Per-section reasons** keep the version history readable.
+  - **Check, and nothing saved on failure:** a bad answer never replaces a working strategy.
+- **Alternatives considered:** Only keep/change plus a reason (can't tell a bad strategy from one not followed); saving output that fails the check, or retrying until it passes (could replace a working strategy; retries add cost).
+
+**Update (2026-10-01): how trading runs use the strategy**
+- **Choice:** The app adds the current strategy to every trading run's input. Each order names the section it follows, or is marked "deviation" with a reason; deviations are allowed and reviewed. The run summary says how the run followed the strategy.
+- **Why:**
+  - **Supplied by the app, not a prompt line:** always present and exact, as in D42.
+  - **Section per order:** makes "was it followed" checkable at review time.
+  - **Deviations allowed but marked:** real news can justify breaking the strategy. Forbidding deviations would push the agent to hide them in vague reasons; marking makes them visible and reviewable.
+- **Alternatives considered:** Forbidding deviations or blocking them in code (turns the strategy into rules; breaks get hidden rather than reported); no section per order (following can't be checked); the strategy in the prompt file (it changes every version, so it belongs in the input).
+
+**Update (2026-10-01): limits**
+- **Choice:** One AI call with no tools; never overlaps a trading run or refresh; allowed any time; a failed review doesn't count and isn't retried automatically; a missed scheduled review gets one catch-up at start-up.
+- **Why:**
+  - **One call, no tools:** the review is about its own record, so it stays cheap (about a cent or less on the default model) and uses no web searches.
+  - **No overlap:** the strategy and portfolio stay consistent while a review reads them.
+  - **Any time:** the scheduled slot is after the close anyway.
+  - **Failed reviews don't count:** a technical failure shouldn't block the next real review or lock in a strategy.
+  - **One catch-up:** matches how the scheduler already handles a missed run.
+- **Alternatives considered:** Research during reviews (costs searches, off the point); reviews only while the market is closed (blocks the button for no gain); automatic retries (cost, and the same failure again); skipping a missed review until next week (the strategy goes unreviewed past its period).
+
+**Update (2026-10-01): "targets" instead of "prediction"**
+- **Choice:** Section 5 is renamed *My targets for this period* (was *How I'll know it's working*); the review's verdict on it is **met / partly met / missed** (was came true / partly / didn't).
+- **Why:** The user asked what "prediction came true" meant; "targets" says the same thing more plainly. The targets are still set before the results exist, so the strategy is judged against what it promised. The verdict is the agent's judgement against the code's scorecard, not a code check (the targets are plain words); the user sees both in the history.
+- **Alternatives considered:** Keeping "prediction" (unclear); numeric targets checked by code (would turn section 5 into a form, as with the rejected code-enforced numbers).
+
 ---
 
 ## UI design
@@ -426,14 +522,35 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
 - **Why:** The user wants to paste runs to an AI for analysis. Selecting text by hand misses the full source URLs (only site names are shown) and is awkward across collapsed sections. Plain text works in any chat and is still readable for a person.
 - **Alternatives considered:** Copying JSON (complete but noisy to read); one "Copy all runs" button (too long to paste; one run is the usual unit of analysis).
 
+**Update (2026-09-30): research sits with the order it explains; the rest is one line each**
+- **Choice:** An open run reads: decision summary → each order with its result, reason and the research on that stock → market overview → other stocks researched, one line each, opened by a click → cost.
+- **Why:**
+  - The first real run listed 15 findings as full paragraphs. Four explained the trades; the rest were stocks the agent looked at and left alone. The user had to hunt for the evidence behind each trade.
+  - Putting the research under its order answers "why this trade?" in one place.
+  - Nothing is removed: the other findings are one click away, a finding with a warning starts open, and Copy still gives the full run for AI analysis.
+- **Alternatives considered:** Hiding all research behind one "details" link (rejected before, and still: it hides the evidence for the trades); keeping the flat list (complete, but the trades' evidence is buried).
+
+**Update (2026-09-30): colour with one meaning, and price chips**
+- **Choice:** Green = up or buy, red = down or sell, as on Home. A chip with price and day change on every stock (grey under 0.05%, explained on hover), a coloured edge on each order, a tinted box for the market overview, and the other stocks sorted from biggest fall to biggest rise.
+- **Why:**
+  - The user found the log too much plain text to read. Agreed from a preview of the Sep 28 run.
+  - The chips let the user scan the stocks the agent left alone by colour, without reading; sorting puts the biggest movers at the two ends.
+  - Hover keeps the chip short. Trade-off accepted: no explanation on a touch screen.
+- **Alternatives considered:** Highlighting words inside the findings (busy, and the app would have to guess which words matter); writing "today" on every chip (repeats on every line).
+
 ### D32: Home screen built around the agent, with a value chart
 - **Choice:** Home shows the three key numbers, a value chart against the S&P 500, the agent's latest decision in its own words, and compact holdings.
 - **Why:**
   - The user chose Alpha Arena as the model: this app exists to watch an AI trade, so its reasoning belongs on the first screen next to the results, not only on a separate tab.
   - One chart against the benchmark answers the main question ("is the AI beating the market?") at a glance, which Robinhood and Alpha Arena both lead with. It also extends D23 from a single number to a trend.
   - Holdings stay compact because the watchlist (D30) and Decision log (D31) hold the detail.
+- **Trade markers (2026-09-30):** Each run that traded gets a dot on the agent's line (green bought, red sold, half and half both), on the value point recorded right after that run (D33). Hover lists the trades and a click opens the run in the Decision log.
+  - The user found the chart didn't show when the agent acted: a flat line then a drop gave no clue that the drop followed a set of buys.
+  - It matches the Watchlist charts' buy/sell markers (D37), so both charts read the same way.
+  - Trades come with `/api/history` instead of from the loaded runs, which stop at the latest 50, so older markers still show.
+  - Alternatives considered: markers on every run, trading or not (noise, since most runs may hold); vertical lines across the chart (clutter the benchmark line); a separate trades strip under the chart (more space for the same information).
 - **Alternatives considered:** A classic brokerage home, portfolio first with the AI on its own tab (the draft; the AI less central); no chart for v1 (less to build, but loses the main visual).
-- **Date:** 2026-09-26
+- **Date:** 2026-09-26 (trade markers added 2026-09-30)
 
 ### D33: Record value history for the chart
 - **Choice:** Save portfolio value and the SPY price after every run and once per trading day at the close.
@@ -492,6 +609,21 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
 - **Alternatives considered:** Trend lines only (no detail); an expandable chart only (no at-a-glance comparison).
 - **Date:** 2026-09-26
 
+### D44: The strategy gets its own tab
+- **Choice:** A fourth tab, **Strategy**, holding the current strategy, the "Review strategy" button with when the next review becomes possible, and the history of versions and reviews. Layout agreed from a preview before building.
+- **Why:** The strategy is something you read and return to, with a history behind it, like the Watchlist, so it needs a fixed place. Links from other screens can still point to it.
+- **Alternatives considered:** A section on Home (makes Home long; the history doesn't fit); reviews in the Decision log only (the current strategy would have no fixed place to read it).
+- **Date:** 2026-10-01
+
+**Update (2026-10-01): layout agreed from a preview**
+- **Choice:** Review bar (version, button, when a review is possible, progress bars for the minimums) → four numbers for the current version → the five sections with changes tagged and targets in a tinted box → review history as expandable rows with Targets and Followed tags.
+- **Why:**
+  - **Review bar** answers "when can it review?" without the user counting days and runs.
+  - **Four numbers** answer "is it working?", including whether the strategy is being followed.
+  - **Tagged changes** with a line on why keep versions comparable at a glance.
+  - **History rows** follow the Decision log pattern the user already knows (D31), with room for the reasons.
+- **Alternatives considered:** No progress bars (the user would work out the minimums); history as a table (too little room for reasons).
+
 ---
 
 ## Roadmap
@@ -505,3 +637,8 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
   - **Known costs:** N agents means about N× the AI cost and web searches, sharing one free search allowance (D34, D35). Strategy reviews add some AI cost, limited by how often reviews may happen.
 - **Alternatives considered:** Strategies first (smaller, but reworked later); both at once (too much change before the basics are proven); neither (the app would compare nothing).
 - **Date:** 2026-09-27
+
+**Update (2026-10-01): strategies before multiple agents**
+- **Choice:** Agent-written strategies (D43) are step 2, multiple agents step 3. Replaces the "multiple agents before strategies" order above.
+- **Why:** The user wanted to work on strategies next. The rework is small: the strategy is stored in its own table, and going multi-agent later adds an agent column to it, as every other table will need. It also shows whether a written strategy improves the agent before paying for N agents. The cost: the screens showing strategy versions will need a per-agent pass later.
+- **Alternatives considered:** Keeping the original order (multiple agents first).

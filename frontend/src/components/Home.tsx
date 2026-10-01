@@ -1,15 +1,15 @@
-import type { HistoryPoint, Portfolio, Run } from '../api'
-import { chartLines } from '../chart'
+import type { Portfolio, Run, ValueHistory } from '../api'
+import { chartLines, valueMarkers, type ValueMarker } from '../chart'
 import { comparisonText, formatDateTime, formatMoney, formatPercent, signClass } from '../format'
 
 // Home (D32): key numbers, value chart vs the benchmark, the agent's latest decision, compact holdings.
 
 interface Props {
   portfolio: Portfolio | null
-  history: HistoryPoint[]
+  history: ValueHistory
   runs: Run[]
   running: boolean
-  onOpenLog: () => void
+  onOpenLog: (runId?: string) => void
 }
 
 export function Home({ portfolio, history, runs, running, onOpenLog }: Props) {
@@ -41,7 +41,7 @@ export function Home({ portfolio, history, runs, running, onOpenLog }: Props) {
         </div>
       </div>
 
-      <ValueChart history={history} currency={currency} benchmark={portfolio.benchmark_symbol} />
+      <ValueChart history={history} currency={currency} benchmark={portfolio.benchmark_symbol} onOpenRun={onOpenLog} />
 
       <div className="home-grid">
         <div className="card">
@@ -50,14 +50,14 @@ export function Home({ portfolio, history, runs, running, onOpenLog }: Props) {
             {latest && <span className="muted small">{formatDateTime(latest.started_at)}</span>}
           </div>
           {running ? (
-            <p className="muted">The agents are working right now. <a href="#" onClick={onOpenLog}>Follow along in the Decision log</a></p>
+            <p className="muted">The agents are working right now. <a href="#" onClick={() => onOpenLog()}>Follow along in the Decision log</a></p>
           ) : !latest ? (
             <p className="muted">No decisions yet. Use “Run now” during market hours.</p>
           ) : (
             <LatestDecision run={latest} currency={currency} />
           )}
           {latest && !running && (
-            <a href="#" className="small" onClick={onOpenLog}>Full decision log →</a>
+            <a href="#" className="small" onClick={() => onOpenLog()}>Full decision log →</a>
           )}
         </div>
 
@@ -118,10 +118,18 @@ function LatestDecision({ run, currency }: { run: Run; currency: string }) {
   )
 }
 
-function ValueChart({ history, currency, benchmark }: { history: HistoryPoint[]; currency: string; benchmark: string }) {
+interface ValueChartProps {
+  history: ValueHistory
+  currency: string
+  benchmark: string
+  onOpenRun: (runId: string) => void
+}
+
+function ValueChart({ history: { points, trades }, currency, benchmark, onOpenRun }: ValueChartProps) {
   const width = 600
   const height = 150
-  const lines = chartLines(history, width, height)
+  const lines = chartLines(points, width, height)
+  const markers = valueMarkers(points, trades, width, height)
   return (
     <div className="card">
       <div className="card-head">
@@ -134,19 +142,39 @@ function ValueChart({ history, currency, benchmark }: { history: HistoryPoint[];
         <p className="muted">The chart fills in as runs happen: a point is added after every run.</p>
       ) : (
         <>
-          <svg viewBox={`0 0 ${width} ${height}`} className="chart" preserveAspectRatio="none" role="img" aria-label="Portfolio value compared with the S&P 500">
-            <polyline className="line-bench" points={lines.benchmark} />
-            <polyline className="line-agent" points={lines.portfolio} />
-          </svg>
+          {/* Markers are HTML over the stretched SVG so they stay round and can be clicked. */}
+          <div className="chart-wrap">
+            <svg viewBox={`0 0 ${width} ${height}`} className="chart" preserveAspectRatio="none" role="img" aria-label="Portfolio value compared with the S&P 500">
+              <polyline className="line-bench" points={lines.benchmark} />
+              <polyline className="line-agent" points={lines.portfolio} />
+            </svg>
+            {markers.map((m) => (
+              <button
+                key={m.runId}
+                className={`value-marker ${m.side}`}
+                style={{ left: `${(m.x / width) * 100}%`, top: `${(m.y / height) * 100}%` }}
+                title={markerText(m, currency)}
+                aria-label={markerText(m, currency)}
+                onClick={() => onOpenRun(m.runId)}
+              />
+            ))}
+          </div>
           <div className="chart-axis small muted">
-            <span>{formatDateTime(history[0].at)}</span>
+            <span>{formatDateTime(points[0].at)}</span>
             <span>
               {formatMoney(String(lines.min), currency)} – {formatMoney(String(lines.max), currency)}
             </span>
-            <span>{formatDateTime(history[history.length - 1].at)}</span>
+            <span>{formatDateTime(points[points.length - 1].at)}</span>
           </div>
         </>
       )}
     </div>
   )
+}
+
+function markerText(marker: ValueMarker, currency: string): string {
+  const orders = marker.orders.map(
+    (o) => `${o.side.toUpperCase()} ${o.quantity} ${o.symbol} @ ${formatMoney(o.price, currency)}`,
+  )
+  return [formatDateTime(marker.at), ...orders, 'Click to open in the Decision log'].join('\n')
 }

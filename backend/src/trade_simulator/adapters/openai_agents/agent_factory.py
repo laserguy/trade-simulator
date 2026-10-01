@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from agents import Agent, Model, RunContextWrapper, Runner, function_tool
 
+from trade_simulator.adapters.openai_agents.inputs import with_research_note
 from trade_simulator.adapters.openai_agents.mcp_config import McpServers
 from trade_simulator.adapters.openai_agents.prompts import PromptLibrary
 from trade_simulator.adapters.openai_agents.schemas import (
@@ -136,7 +137,7 @@ def _ask_research_agent_tool(research: Agent):
             return f"{exc}. Decide with the research you already have."
         result = await Runner.run(
             research,
-            request,
+            with_research_note(request, state.research_note),
             context=state,
             run_config=state.run_config,
             hooks=state.hooks,
@@ -144,7 +145,7 @@ def _ask_research_agent_tool(research: Agent):
         )
         state.add_usage(result.context_wrapper.usage)
         report: ResearchReport = result.final_output
-        state.findings.extend(to_findings(report.findings, state.tool_urls))
+        state.findings.extend(to_findings(report.findings, state.tool_urls, state.quotes))
         return report.model_dump_json()
 
     return ask_research_agent

@@ -58,6 +58,14 @@ def test_quotes_report_price_and_daily_change():
     assert data == {"AAPL": {"price": "100.5", "change_percent": "12.3", "previous_close": "89.5"}}
 
 
+def test_quotes_are_remembered_for_the_decision_log():
+    toolbox, state = make()
+
+    toolbox.quotes(state, ["aapl"])
+
+    assert state.quotes == {"AAPL": Quote("AAPL", Decimal("100.5"), Decimal("12.3"), Decimal("89.5"))}
+
+
 def test_quotes_are_capped_per_call_to_protect_rate_limit():
     finnhub = FakeFinnhub()
     toolbox, state = make(finnhub=finnhub)

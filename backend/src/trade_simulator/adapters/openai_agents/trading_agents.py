@@ -11,7 +11,11 @@ from contextlib import AsyncExitStack
 from agents import Agent, RunConfig, Runner, gen_trace_id, set_tracing_export_api_key, trace
 
 from trade_simulator.adapters.openai_agents.agent_factory import AgentModels, AgentSet, build_agents
-from trade_simulator.adapters.openai_agents.inputs import render_decision_input, render_refresh_input
+from trade_simulator.adapters.openai_agents.inputs import (
+    render_decision_input,
+    render_refresh_input,
+    render_research_note,
+)
 from trade_simulator.adapters.openai_agents.mcp_config import McpServers
 from trade_simulator.adapters.openai_agents.models import make_model
 from trade_simulator.adapters.openai_agents.prompts import PromptLibrary
@@ -63,6 +67,7 @@ class OpenAITradingAgents:
 
     async def decide(self, context: DecisionContext) -> AgentDecision:
         agents, state = self._prepare(context.limits)
+        state.research_note = render_research_note(context)
         decision, trace_id = await self._run(
             "Decision run", agents.trading, render_decision_input(context), state, TRADING_MAX_TURNS
         )

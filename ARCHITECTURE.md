@@ -31,12 +31,13 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D11, D12 agents and their roles | `adapters/openai_agents/agent_factory.py`, `trading_agents.py`, `toolbox.py`, `schemas.py` (structured outputs), `inputs.py` (the text each agent run starts from), `state.py` (per-run state: budget, usage, findings), `backend/prompts/*.md` |
 | D40 market context in research | `adapters/finnhub_market_data.py` (`market_news`), `toolbox.py` and `agent_factory.py` (`get_market_news` tool), `application/ports.py` (`MarketOverview`, `Repository.latest_market_overview`), `application/run_decision.py`, `inputs.py`, `backend/prompts/*.md` |
 | D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
+| D42 agent's memory of its trades | `application/trade_memory.py` (buys behind each holding, performance line), `application/run_decision.py` (puts them in `DecisionContext`), `inputs.py` (writes them into the agent's starting text, and builds the holdings note), `agent_factory.py` (adds the note to every research request), `adapters/sqlite_repository.py` (`executed_trades`, with reasons) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |
 | D20 runs never overlap | `application/run_guard.py`, `application/run_decision.py` |
 | D21 market hours | `adapters/exchange_calendar.py` (implements `MarketCalendar`) |
-| D22 decision log records | `core/decision_log.py`, `application/run_cost.py`, `adapters/text_links.py`; sources checked against the links tools returned: `adapters/openai_agents/run_hooks.py` (collects them), `schemas.py` (drops the rest) |
+| D22 decision log records | `core/decision_log.py`, `application/run_cost.py`, `adapters/text_links.py`; sources checked against the links tools returned: `adapters/openai_agents/run_hooks.py` (collects them), `schemas.py` (drops the rest); price and day change per finding: `toolbox.py` (remembers the quotes in `state.py`), `schemas.py` (attaches them) |
 | D23, D33 benchmark and value history | `application/portfolio_view.py`, `application/value_history.py` |
 | D25 prompts and tracing | `adapters/openai_agents/prompts.py`, `trading_agents.py` |
 | D27 MCP servers | `adapters/openai_agents/mcp_config.py`, `backend/mcp_servers.example.json` |
@@ -44,7 +45,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D3, D35 run mode, scheduler, cost estimate | `application/run_mode.py`, `schedule.py`, `scheduler.py`, `run_cost_estimate.py`, `frontend/src/components/RunModeSection.tsx` |
 | D36 price history | `application/price_history.py`, `adapters/tiingo_price_history.py` (implements `PriceHistorySource`) |
 | D30 watchlist view | `application/watchlist_view.py` (watchlist with quotes and held flag) |
-| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers), `format.ts` (money, percentages, exchange times) and `runText.ts` (a run as plain text for the Decision log's Copy button) |
+| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers on the watchlist and Home charts), `format.ts` (money, percentages, exchange times), `runSections.ts` (how an open Decision log run is grouped: orders with their research, the rest) and `runText.ts` (a run as plain text for the Decision log's Copy button) |
 
 ## Config (`backend/.env`, see `.env.example`)
 
@@ -66,7 +67,7 @@ Money is stored as exact decimal text. New columns on existing tables go in `_AD
 |-------|-------|
 | `portfolio`, `positions` | Cash (a single row), and holdings with average cost |
 | `runs` | One row per run: trigger, status, failure reason, tokens, searches, model, trace ID |
-| `findings` | Research findings per run (`symbol` can also be `OVERALL` or `MARKET`, D22), with sources and warnings |
+| `findings` | Research findings per run (`symbol` can also be `OVERALL` or `MARKET`, D22), with sources, warnings, and the stock's price and day change when it was quoted in the run |
 | `order_results` | Proposed orders per run, with executed price and fee, or the rejection reason |
 | `watchlist_meta`, `watchlist_entries` | The current watchlist with a reason and sources per stock |
 | `settings` | Key/value: `openai_api_key`, `anthropic_api_key`, `model_id`, `run_mode` |
@@ -80,7 +81,7 @@ Money is stored as exact decimal text. New columns on existing tables go in `_AD
 |---------------|---------|
 | `GET /api/status` | Market open or closed, next open, run in progress, exchange info |
 | `GET /api/portfolio` | Cash, holdings, P&L, benchmark comparison |
-| `GET /api/history` | Value chart points |
+| `GET /api/history` | Value chart points, and each run's executed trades for the chart's markers (D32) |
 | `GET /api/watchlist` | Watchlist with quotes and whether each stock is held |
 | `GET /api/price-history/{symbol}?period=1M\|3M\|1Y` | Chart data with the agent's trades |
 | `GET /api/runs`, `GET /api/runs/{id}` | Decision log |

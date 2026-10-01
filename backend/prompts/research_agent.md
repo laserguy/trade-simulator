@@ -21,7 +21,8 @@ companies. When the request asks for market context:
 2. Report them as one finding with symbol `MARKET`: the events in plain sentences, with sources.
 3. For every stock you report on, say whether and how it is exposed to those events: its sector,
    supply chain, regulation, or where it sells. Name the event and the likely direction (helps or
-   hurts), in that stock's own finding. If a stock is not exposed, you don't need to mention it.
+   hurts), in that stock's own finding. Skip exposure that every stock shares, such as higher rates
+   weighing on valuations, and cite the market sources only in `MARKET`.
 Only report connections you can explain; don't invent links between an event and a stock.
 
 # Anomaly check (always do this)

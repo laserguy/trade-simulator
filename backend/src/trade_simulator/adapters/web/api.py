@@ -216,11 +216,21 @@ def create_app(services: WebServices, frontend_dist: Path | None = None) -> Fast
         }
 
     @app.get("/api/history")
-    def history() -> list[dict]:
-        return [
-            {"at": p.at.isoformat(), "total_value": _money(p.total_value), "benchmark_value": _money(p.benchmark_value)}
-            for p in services.value_history.points()
-        ]
+    def history() -> dict:
+        # Value chart points, plus each run's executed trades for the chart's markers (D32).
+        runs: dict[str, dict] = {}
+        for t in services.repository.executed_trades():
+            run = runs.setdefault(t.run_id, {"run_id": t.run_id, "at": t.at.isoformat(), "orders": []})
+            run["orders"].append(
+                {"side": t.side.value, "quantity": t.quantity, "symbol": t.symbol, "price": _money(t.price)}
+            )
+        return {
+            "points": [
+                {"at": p.at.isoformat(), "total_value": _money(p.total_value), "benchmark_value": _money(p.benchmark_value)}
+                for p in services.value_history.points()
+            ],
+            "trades": list(runs.values()),
+        }
 
     @app.get("/api/activity")
     def activity() -> dict:
@@ -398,6 +408,8 @@ def _finding_json(finding: Finding) -> dict:
         "summary": summary,
         "sources": list(merge_sources(finding.sources, urls)),
         "warnings": list(finding.warnings),
+        "price": None if finding.price is None else str(finding.price),
+        "change_percent": None if finding.change_percent is None else str(finding.change_percent),
     }
 
 

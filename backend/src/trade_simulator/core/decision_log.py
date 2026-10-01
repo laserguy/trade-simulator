@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 
 from trade_simulator.core.errors import DomainError
@@ -31,6 +32,9 @@ class Finding:
     summary: str
     sources: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    # The stock's quote when the agent looked it up; None when it wasn't quoted (or for OVERALL and MARKET).
+    price: Decimal | None = None
+    change_percent: Decimal | None = None
 
 
 @dataclass(frozen=True)

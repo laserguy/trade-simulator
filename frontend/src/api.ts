@@ -1,7 +1,13 @@
 // Typed client for the FastAPI backend (backend/src/trade_simulator/adapters/web/api.py).
-import type { Bar, HistoryPoint, Trade } from './chart'
+import type { Bar, HistoryPoint, RunTrades, Trade } from './chart'
 
-export type { HistoryPoint }
+export type { HistoryPoint, RunTrades }
+
+// Value chart points and each run's executed trades, for the Home chart's markers (D32, D33).
+export interface ValueHistory {
+  points: HistoryPoint[]
+  trades: RunTrades[]
+}
 
 export interface Status {
   market_open: boolean
@@ -73,6 +79,8 @@ export interface Finding {
   summary: string
   sources: string[]
   warnings: string[]
+  price: string | null // the stock's quote when the agent looked it up; null for older runs and for OVERALL or MARKET
+  change_percent: string | null
 }
 
 export interface OrderRow {
@@ -174,7 +182,7 @@ export const api = {
   portfolio: () => request<Portfolio>('/api/portfolio'),
   watchlist: () => request<Watchlist | null>('/api/watchlist'),
   runs: (limit = 50) => request<Run[]>(`/api/runs?limit=${limit}`),
-  history: () => request<HistoryPoint[]>('/api/history'),
+  history: () => request<ValueHistory>('/api/history'),
   activity: () => request<Activity>('/api/activity'),
   priceHistory: (symbol: string, period: ChartPeriod) =>
     request<PriceHistory>(`/api/price-history/${encodeURIComponent(symbol)}?period=${period}`),

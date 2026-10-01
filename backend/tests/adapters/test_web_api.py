@@ -135,7 +135,10 @@ def test_runs_are_listed_with_orders_findings_cost_and_trace_link(tmp_path):
         finished_at=NOW + timedelta(seconds=40),
         status=RunStatus.COMPLETED,
         failure_reason=None,
-        findings=(Finding("AAPL", "Beat earnings", ("https://n",), ("Unusual jump",)),),
+        findings=(
+            Finding("AAPL", "Beat earnings", ("https://n",), ("Unusual jump",), Decimal("200"), Decimal("-1.4")),
+            Finding("OVERALL", "Bought one stock."),
+        ),
         order_results=(
             OrderResult(Order("AAPL", Side.BUY, 5, "Cheap"), OrderStatus.EXECUTED, Decimal("200"), Decimal("1")),
             OrderResult(Order("MSFT", Side.BUY, 50, "All in"), OrderStatus.REJECTED,
@@ -155,6 +158,8 @@ def test_runs_are_listed_with_orders_findings_cost_and_trace_link(tmp_path):
     }
     assert "20%" in body["orders"][1]["rejection_reason"] or "cap" in body["orders"][1]["rejection_reason"]
     assert body["findings"][0]["warnings"] == ["Unusual jump"]
+    assert (body["findings"][0]["price"], body["findings"][0]["change_percent"]) == ("200", "-1.4")
+    assert (body["findings"][1]["price"], body["findings"][1]["change_percent"]) == (None, None)
     assert body["cost"]["estimated_usd"] == "0.2000"
     assert body["trace_url"].endswith("trace_abc")
     assert client.get("/api/runs/r1").json()["id"] == "r1"
@@ -267,8 +272,35 @@ def test_history_endpoint_returns_value_points(tmp_path):
     client, services = build(tmp_path)
     services.value_history.record()
 
-    assert client.get("/api/history").json() == [
-        {"at": NOW.isoformat(), "total_value": "10000.00", "benchmark_value": "10000.00"}
+    assert client.get("/api/history").json() == {
+        "points": [{"at": NOW.isoformat(), "total_value": "10000.00", "benchmark_value": "10000.00"}],
+        "trades": [],
+    }
+
+
+def test_history_endpoint_groups_executed_trades_by_run(tmp_path):
+    client, services = build(tmp_path)
+    buy = OrderResult(Order("AAPL", Side.BUY, 5, "x"), OrderStatus.EXECUTED, Decimal("200"), Decimal("1"))
+    sell = OrderResult(Order("MSFT", Side.SELL, 2, "x"), OrderStatus.EXECUTED, Decimal("410.5"), Decimal("1"))
+    rejected = OrderResult(Order("NVDA", Side.BUY, 99, "x"), OrderStatus.REJECTED, rejection_reason=RejectionReason.EXCEEDS_POSITION_CAP)
+    services.repository.save_run(
+        DecisionRun(
+            id="t1", trigger=RunTrigger.MANUAL, started_at=NOW, finished_at=NOW, status=RunStatus.COMPLETED,
+            failure_reason=None, findings=(), order_results=(buy, sell, rejected),
+            cost=RunCost(0, 0, 0), trace_id=None,
+        ),
+        None,
+    )
+
+    assert client.get("/api/history").json()["trades"] == [
+        {
+            "run_id": "t1",
+            "at": NOW.isoformat(),
+            "orders": [
+                {"side": "buy", "quantity": 5, "symbol": "AAPL", "price": "200.00"},
+                {"side": "sell", "quantity": 2, "symbol": "MSFT", "price": "410.50"},
+            ],
+        }
     ]
 
 

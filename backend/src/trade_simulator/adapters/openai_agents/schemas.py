@@ -1,10 +1,13 @@
 """Structured outputs the agents must return, and their conversion into core objects."""
 
+from collections.abc import Mapping
+from dataclasses import replace
 from typing import Literal
 
 from pydantic import BaseModel
 
 from trade_simulator.adapters.text_links import keep_known, merge_sources, split_links
+from trade_simulator.application.ports import Quote
 from trade_simulator.core.decision_log import Finding, WatchlistEntry
 from trade_simulator.core.errors import InvalidOrderError
 from trade_simulator.core.order import Order, Side
@@ -66,10 +69,18 @@ def to_orders(decision: TradingDecision) -> tuple[list[Order], list[Finding]]:
 # `known_urls` are the links the tools returned in this run; any other source is dropped (D22).
 
 
-def to_findings(findings: list[ResearchFinding], known_urls: set[str]) -> list[Finding]:
-    return [
-        _finding(f.symbol.strip().upper(), f.summary, f.sources, known_urls, tuple(f.warnings)) for f in findings
-    ]
+def to_findings(
+    findings: list[ResearchFinding], known_urls: set[str], quotes: Mapping[str, Quote] | None = None
+) -> list[Finding]:
+    """`quotes` are the ones the quote tool returned in this run; each finding keeps its stock's price and change."""
+    converted = []
+    for f in findings:
+        finding = _finding(f.symbol.strip().upper(), f.summary, f.sources, known_urls, tuple(f.warnings))
+        quote = (quotes or {}).get(finding.symbol)
+        if quote:
+            finding = replace(finding, price=quote.price, change_percent=quote.change_percent)
+        converted.append(finding)
+    return converted
 
 
 def to_market_overview(result: WatchlistResult, known_urls: set[str]) -> Finding:

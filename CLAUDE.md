@@ -4,6 +4,7 @@
 - [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md): what we are building (decisions D1, D2, …).
 - [WHY.md](WHY.md): why each decision was made (same IDs).
 - [ARCHITECTURE.md](ARCHITECTURE.md): where things are in the code (layers, decision → file map, config, tables, endpoints, how to add a provider). Keep it current when files, tables, endpoints or settings change.
+- [PROMPT_LOG.md](PROMPT_LOG.md): why each line in the agent prompts is there, what run caused it, and whether it worked. Also lists problems seen in runs that have not led to a change.
 
 ## Rules
 - Before designing or writing code, read the decision table in PROBLEM_STATEMENT.md to find the D#s the task touches, then read only those `### D#:` entries in WHY.md. Read ARCHITECTURE.md in full before changing code. Skip the decision lookup for small fixes (typos, styling, obvious bugs) that touch no decision. Stay within the current scope.
@@ -13,6 +14,14 @@
 - If code would contradict a decision, stop and ask the user instead of silently deviating.
 - Don't build "Parked for later" items unless the user asks.
 - Follow the engineering principles D17–D19 and D38 in every change: layers with dependencies pointing inward, tests first, atomic trades, never log API keys, and every external tool behind an app-owned interface, chosen by config and never named in the UI.
+
+## Changing agent prompts
+Prompts are not tuned run by run; that goes in circles. Before changing anything in `backend/prompts/*.md`:
+- Read the PROMPT_LOG.md entries for the lines involved, so you know why they are there.
+- First check whether the app can fix the problem in code, by supplying the information itself. If it can, do that and leave the prompt alone.
+- Change a prompt only when the same problem has shown up in **at least three runs**, or when the change is part of a decision (D#) being built. A problem seen in fewer runs goes in PROMPT_LOG.md under "Open observations", with the run's date.
+- When reviewing a run, report what you see. Don't attach a prompt change to each finding.
+- Every prompt change gets a PROMPT_LOG.md entry in the same step: the line, the run and problem that caused it, and what it is expected to fix. Fill in the result after later runs.
 
 ## Commands
 - Run backend tests: `cd backend && uv run pytest`

@@ -1,7 +1,7 @@
 """Interfaces the use cases depend on, and the data passed through them. Adapters implement them (D17)."""
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
@@ -47,7 +47,9 @@ class Repository(Protocol):
 
     def load_price_sync(self, exchange: str, symbol: str) -> "PriceSync | None": ...
 
-    def executed_trades(self, symbol: str) -> "list[ExecutedTrade]": ...
+    def executed_trades(self, symbol: str | None = None) -> "list[ExecutedTrade]":
+        """Executed trades, oldest run first; all symbols when `symbol` is None."""
+        ...
 
     def latest_market_overview(self) -> "MarketOverview | None":
         """The market overview of the newest completed watchlist refresh (D40)."""
@@ -137,10 +139,13 @@ class PriceSync:
 
 @dataclass(frozen=True)
 class ExecutedTrade:
-    at: datetime
+    at: datetime  # when the run started
     side: "Side"
     quantity: int
     price: Decimal
+    run_id: str
+    symbol: str
+    reason: str = ""  # the agent's reason for the order
 
 
 @dataclass(frozen=True)
@@ -204,6 +209,16 @@ class MarketOverview:
 
 
 @dataclass(frozen=True)
+class Performance:
+    """Return of the portfolio and of the benchmark since tracking began, in percent (D23, D42)."""
+
+    since: datetime
+    portfolio_percent: Decimal
+    benchmark_symbol: str
+    benchmark_percent: Decimal
+
+
+@dataclass(frozen=True)
 class DecisionContext:
     profile: ExchangeProfile
     rules: TradingRules
@@ -213,6 +228,9 @@ class DecisionContext:
     watchlist: Watchlist
     now: datetime
     market_overview: MarketOverview | None = None
+    # The agent's own past (D42): the buys behind each current holding, and how the portfolio is doing.
+    holding_buys: Mapping[str, tuple[ExecutedTrade, ...]] = field(default_factory=dict)
+    performance: Performance | None = None
 
 
 @dataclass(frozen=True)

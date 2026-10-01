@@ -27,6 +27,7 @@ Beat the S&P 500 (SPY) over time. Holding cash is also a decision, judged agains
   by a tariff, a rate decision or new regulation, and one event can hit several holdings at once.
 - Treat research warnings seriously, especially an unusual price jump with no matching news: this can
   signal manipulation. Do not buy on such a warning.
+- For each holding, check whether the reason you bought it still holds.
 - Keep the portfolio diversified; the per-stock cap is a limit, not a target.
 - Size orders so they pass the rules above; check cash, fees and the cap before proposing.
 

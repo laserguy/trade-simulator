@@ -73,6 +73,25 @@ td.r, th.r { text-align: right; }
 .finding { padding: 8px 0; border-bottom: 1px dashed var(--border); }
 .finding:last-child { border-bottom: none; }
 .finding .sym { font-weight: 600; margin-right: 6px; }
+.finding > summary { display: block; padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.finding > summary::before { content: '▸'; color: var(--muted); display: inline-block; width: 14px; }
+.finding[open] > summary { white-space: normal; }
+.finding[open] > summary::before { content: '▾'; }
+.finding > .sources, .finding > div { margin-left: 14px; }
+.finding .sym { display: inline-block; min-width: 46px; }
+.finding .chip { min-width: 150px; justify-content: space-between; margin-right: 10px; }
+.chip { display: inline-flex; gap: 8px; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 6px;
+  white-space: nowrap; cursor: help; background: var(--surface-2); color: var(--muted); }
+.chip .px { font-weight: 400; color: var(--text); }
+.chip.up { background: color-mix(in srgb, var(--up) 13%, transparent); color: var(--up); }
+.chip.down { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
+.market { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); }
+.order { margin: 12px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--border); }
+.order.buy { border-left-color: var(--up); }
+.order.sell { border-left-color: var(--down); }
+.order-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 4px; }
+.evidence { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--border); }
 .warning { color: var(--warn-text); background: var(--warn-bg); padding: 2px 8px; border-radius: 6px; font-size: 13px; margin-top: 4px; display: inline-block; }
 .sources { font-size: 12px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .sources a { overflow-wrap: anywhere; }
@@ -129,6 +148,15 @@ tr.chart-row td { background: var(--surface-2); padding: 4px 8px 12px; }
 .trend.falling { stroke: var(--down); }
 .marker.buy { fill: var(--up); }
 .marker.sell { fill: var(--down); }
+.chart-wrap { position: relative; }
+.value-marker {
+  position: absolute; width: 12px; height: 12px; padding: 0; transform: translate(-50%, -50%);
+  border: 2px solid var(--surface); border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 1px var(--border);
+}
+.value-marker:hover, .value-marker:focus-visible { width: 16px; height: 16px; outline: none; }
+.value-marker.buy { background: var(--up); }
+.value-marker.sell { background: var(--down); }
+.value-marker.mixed { background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); }
 
 .mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mode-card { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 10px;

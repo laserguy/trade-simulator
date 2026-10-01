@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, signClass, tokens, tradingRuleLines } from './format'
+import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, moveTone, signClass, tokens, tradingRuleLines } from './format'
 
 describe('tradingRuleLines', () => {
   it('states every rule in plain words, with the enforced fee and cap', () => {
@@ -87,5 +87,14 @@ describe('tokens', () => {
     expect(tokens(950)).toBe('950')
     expect(tokens(12_300)).toBe('12.3k')
     expect(tokens(2_500_000)).toBe('2.5M')
+  })
+})
+
+describe('moveTone', () => {
+  it('is up or down for a real move and flat when the change rounds to nothing', () => {
+    expect(moveTone('0.3')).toBe('up')
+    expect(moveTone('-4.12')).toBe('down')
+    expect(moveTone('-0.01')).toBe('flat')
+    expect(moveTone('0.04')).toBe('flat')
   })
 })

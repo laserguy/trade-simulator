@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS findings (
     summary TEXT NOT NULL,
     sources TEXT NOT NULL,
     warnings TEXT NOT NULL,
+    price TEXT,
+    change_percent TEXT,
     PRIMARY KEY (run_id, seq)
 );
 CREATE TABLE IF NOT EXISTS order_results (
@@ -128,7 +130,7 @@ CREATE TABLE IF NOT EXISTS benchmark_start (
 """
 
 # Columns added after the first release, applied to existing databases on start-up.
-_ADDED_COLUMNS = {"runs": {"model": "TEXT"}}
+_ADDED_COLUMNS = {"runs": {"model": "TEXT"}, "findings": {"price": "TEXT", "change_percent": "TEXT"}}
 
 
 class SqliteRepository:
@@ -220,15 +222,15 @@ class SqliteRepository:
             _from_iso(row["last_checked_at"]),
         )
 
-    def executed_trades(self, symbol: str) -> list[ExecutedTrade]:
+    def executed_trades(self, symbol: str | None = None) -> list[ExecutedTrade]:
         with self._transaction() as conn:
             rows = conn.execute(
-                """SELECT r.started_at, o.side, o.quantity, o.price FROM order_results o
-                   JOIN runs r ON r.id = o.run_id
-                   WHERE o.symbol = ? AND o.status = ? ORDER BY r.started_at""",
-                (symbol, OrderStatus.EXECUTED.value),
+                """SELECT r.started_at, o.side, o.quantity, o.price, o.run_id, o.symbol, o.reason
+                   FROM order_results o JOIN runs r ON r.id = o.run_id
+                   WHERE (? IS NULL OR o.symbol = ?) AND o.status = ? ORDER BY r.started_at, o.seq""",
+                (symbol, symbol, OrderStatus.EXECUTED.value),
             ).fetchall()
-        return [ExecutedTrade(_from_iso(r[0]), Side(r[1]), r[2], Decimal(r[3])) for r in rows]
+        return [ExecutedTrade(_from_iso(r[0]), Side(r[1]), r[2], Decimal(r[3]), r[4], r[5], r[6]) for r in rows]
 
     # --- benchmark (D23) ---
 
@@ -377,9 +379,19 @@ def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
         ),
     )
     conn.executemany(
-        "INSERT INTO findings (run_id, seq, symbol, summary, sources, warnings) VALUES (?, ?, ?, ?, ?, ?)",
+        """INSERT INTO findings (run_id, seq, symbol, summary, sources, warnings, price, change_percent)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         [
-            (run.id, seq, f.symbol, f.summary, json.dumps(list(f.sources)), json.dumps(list(f.warnings)))
+            (
+                run.id,
+                seq,
+                f.symbol,
+                f.summary,
+                json.dumps(list(f.sources)),
+                json.dumps(list(f.warnings)),
+                _decimal_text(f.price),
+                _decimal_text(f.change_percent),
+            )
             for seq, f in enumerate(run.findings)
         ],
     )
@@ -407,7 +419,14 @@ def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
 
 def _read_run(conn: sqlite3.Connection, row: sqlite3.Row) -> DecisionRun:
     findings = tuple(
-        Finding(f["symbol"], f["summary"], tuple(json.loads(f["sources"])), tuple(json.loads(f["warnings"])))
+        Finding(
+            f["symbol"],
+            f["summary"],
+            tuple(json.loads(f["sources"])),
+            tuple(json.loads(f["warnings"])),
+            _decimal_or_none(f["price"]),
+            _decimal_or_none(f["change_percent"]),
+        )
         for f in conn.execute("SELECT * FROM findings WHERE run_id = ? ORDER BY seq", (row["id"],))
     )
     order_results = tuple(

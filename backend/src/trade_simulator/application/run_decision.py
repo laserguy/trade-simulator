@@ -17,6 +17,7 @@ from trade_simulator.application.ports import (
 )
 from trade_simulator.application.run_cost import cost_of
 from trade_simulator.application.run_guard import RunGuard
+from trade_simulator.application.trade_memory import open_position_buys, performance_since_start
 from trade_simulator.core.decision_log import DecisionRun, RunStatus, RunTrigger
 from trade_simulator.core.errors import AgentError, MarketClosedError, RunInProgressError, TradeSimulatorError
 from trade_simulator.core.exchange_profile import ExchangeProfile
@@ -114,8 +115,11 @@ class DecisionRunner:
 
         # Execution uses these same prices: data is ~15 min delayed anyway (D7), and one fetch per run
         # keeps Finnhub calls within its free rate limit.
-        symbols = sorted(watchlist.symbols | set(portfolio.positions))
-        prices = self._market_data.get_prices(symbols)
+        # The benchmark is fetched with them, only for the agent's performance line (D42).
+        tradable = watchlist.symbols | set(portfolio.positions)
+        benchmark = self._profile.benchmark_symbol
+        fetched = self._market_data.get_prices(sorted(tradable | {benchmark}))
+        prices = {symbol: price for symbol, price in fetched.items() if symbol in tradable}
 
         decision = await self._agent.decide(
             DecisionContext(
@@ -127,6 +131,10 @@ class DecisionRunner:
                 watchlist=watchlist,
                 now=started_at,
                 market_overview=self._repository.latest_market_overview(),
+                holding_buys=open_position_buys(self._repository.executed_trades()),
+                performance=performance_since_start(
+                    portfolio, prices, self._profile, self._repository.load_benchmark_start(), fetched.get(benchmark)
+                ),
             )
         )
         report = execute_orders(portfolio, decision.orders, prices, watchlist.symbols, self._rules)

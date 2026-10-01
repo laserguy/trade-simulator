@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from trade_simulator.application.ports import AgentUsage
+from trade_simulator.application.ports import AgentUsage, Quote
 from trade_simulator.core.decision_log import Finding
 from trade_simulator.core.run_budget import RunBudget
 
@@ -16,6 +16,8 @@ class AgentRunState:
     model_id: str | None = None
     findings: list[Finding] = field(default_factory=list)
     tool_urls: set[str] = field(default_factory=set)  # every link a tool returned; only these may be sources (D22)
+    quotes: dict[str, Quote] = field(default_factory=dict)  # latest quote per stock, saved with its finding (D22)
+    research_note: str = ""  # added to every research request: the holdings and why each was bought (D42)
     input_tokens: int = 0
     output_tokens: int = 0
 

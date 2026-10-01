@@ -19,12 +19,12 @@ from trade_simulator.core.decision_log import (
     WatchlistEntry,
 )
 from trade_simulator.core.errors import AgentError, MarketClosedError, RunInProgressError
-from trade_simulator.application.ports import AgentUsage
+from trade_simulator.application.ports import AgentUsage, Performance
 from trade_simulator.core.exchange_profile import US_PROFILE
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.portfolio import Portfolio, Position
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS
-from trade_simulator.core.trading_rules import OrderStatus, RejectionReason
+from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
 NOW = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)
 WATCHLIST = Watchlist(
@@ -140,7 +140,34 @@ def test_prices_cover_holdings_that_left_the_watchlist(repo):
 
     run(make_runner(repo, FakeAgent(decision()), market=market))
 
-    assert sorted(market.requested[0]) == ["AAPL", "MSFT", "TSLA"]
+    assert sorted(market.requested[0]) == ["AAPL", "MSFT", "SPY", "TSLA"]  # SPY for the performance line (D42)
+
+
+def test_agent_sees_why_it_bought_its_holdings_and_how_it_is_doing(repo):
+    repo.save_benchmark_start("SPY", Decimal("500"), NOW)
+    market = FakeMarketData({"AAPL": "200", "MSFT": "400", "SPY": "510"})
+    bought = OrderResult(Order("AAPL", Side.BUY, 5, "Strong quarter"), OrderStatus.EXECUTED, Decimal("200"), Decimal("1"))
+    earlier = DecisionRun("run-0", RunTrigger.MANUAL, NOW, NOW, RunStatus.COMPLETED, None, (), (bought,), RunCost(0, 0, 0), None)
+    repo.save_run(earlier, Portfolio(Decimal("8999"), {"AAPL": Position("AAPL", 5, Decimal("200"))}))
+    agent = FakeAgent(decision())
+
+    run(make_runner(repo, agent, market=market))
+
+    [context] = agent.decision_contexts
+    [buy] = context.holding_buys["AAPL"]
+    assert (buy.quantity, buy.price, buy.reason) == (5, Decimal("200"), "Strong quarter")
+    assert context.performance == Performance(NOW, Decimal("-0.01"), "SPY", Decimal("2"))
+    assert "SPY" not in context.prices
+
+
+def test_agent_gets_no_performance_before_benchmark_tracking_began(repo):
+    agent = FakeAgent(decision())
+
+    run(make_runner(repo, agent))
+
+    [context] = agent.decision_contexts
+    assert context.performance is None
+    assert context.holding_buys == {}
 
 
 def test_rule_breaking_order_is_rejected_and_logged(repo):

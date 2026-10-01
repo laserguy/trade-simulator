@@ -44,6 +44,8 @@ def make_run(run_id="run-1", started_at=START, status=RunStatus.COMPLETED):
                 summary="Earnings beat expectations",
                 sources=("https://example.com/aapl",),
                 warnings=(),
+                price=Decimal("200.15"),
+                change_percent=Decimal("-1.4"),
             ),
         ),
         order_results=(
@@ -220,6 +222,27 @@ def test_older_database_gains_the_model_column(tmp_path):
     assert repository.get_run("run-1").cost.model is None
 
 
+def test_older_database_gains_the_finding_price_columns(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """CREATE TABLE findings (run_id TEXT NOT NULL, seq INTEGER NOT NULL, symbol TEXT NOT NULL,
+           summary TEXT NOT NULL, sources TEXT NOT NULL, warnings TEXT NOT NULL, PRIMARY KEY (run_id, seq))"""
+    )
+    conn.execute("INSERT INTO findings VALUES ('old-run', 0, 'AAPL', 'Old finding', '[]', '[]')")
+    conn.commit()
+    conn.close()
+
+    repository = SqliteRepository(path)
+    repository.initialize()
+    repository.save_run(make_run(), None)
+
+    [finding] = repository.get_run("run-1").findings
+    assert (finding.price, finding.change_percent) == (Decimal("200.15"), Decimal("-1.4"))
+
+
 def test_daily_bars_are_upserted_per_exchange_symbol_and_day(repo):
     from datetime import date
 
@@ -255,6 +278,26 @@ def test_executed_trades_for_a_symbol_come_from_the_decision_log(repo):
     assert (trade.side, trade.quantity, trade.price) == (Side.BUY, 5, Decimal("200.15"))
     assert trade.at == START
     assert repo.executed_trades("MSFT") == []  # the MSFT order was rejected
+
+
+def test_executed_trades_for_all_symbols_carry_run_and_symbol(repo):
+    repo.save_run(make_run("run-1", START), None)
+    repo.save_run(make_run("run-2", START + timedelta(hours=1)), None)
+
+    trades = repo.executed_trades()
+
+    assert [(t.run_id, t.symbol, t.at) for t in trades] == [
+        ("run-1", "AAPL", START),
+        ("run-2", "AAPL", START + timedelta(hours=1)),
+    ]
+
+
+def test_executed_trades_carry_the_reason_the_agent_gave(repo):
+    repo.save_run(make_run(), None)
+
+    [trade] = repo.executed_trades("AAPL")
+
+    assert trade.reason == "Beat earnings"
 
 
 def test_data_survives_reopening_the_database(tmp_path):

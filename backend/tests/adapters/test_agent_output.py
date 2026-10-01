@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from trade_simulator.adapters.openai_agents.schemas import (
     ProposedOrder,
     ResearchFinding,
@@ -9,6 +11,7 @@ from trade_simulator.adapters.openai_agents.schemas import (
     to_orders,
     to_watchlist_entries,
 )
+from trade_simulator.application.ports import Quote
 from trade_simulator.core.order import Side
 
 
@@ -41,6 +44,19 @@ def test_research_findings_convert_to_core_findings():
     )
 
     assert (finding.symbol, finding.sources, finding.warnings) == ("NVDA", ("https://r.com/u",), ("w",))
+
+
+def test_findings_carry_the_price_and_daily_change_the_quote_tool_returned():
+    quotes = {"NVDA": Quote("NVDA", Decimal("230.25"), Decimal("2.3"), Decimal("225.07"))}
+    report = [
+        ResearchFinding(symbol="nvda", summary="S", sources=[], warnings=[]),
+        ResearchFinding(symbol="MARKET", summary="Oil up", sources=[], warnings=[]),
+    ]
+
+    nvda, market = to_findings(report, set(), quotes)
+
+    assert (nvda.price, nvda.change_percent) == (Decimal("230.25"), Decimal("2.3"))
+    assert (market.price, market.change_percent) == (None, None)
 
 
 def test_watchlist_picks_convert_to_entries():

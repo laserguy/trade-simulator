@@ -23,16 +23,20 @@ class ResearchToolbox:
 
     def quotes(self, state: AgentRunState, symbols: list[str]) -> str:
         wanted = [s.strip().upper() for s in symbols][: self.MAX_SYMBOLS_PER_CALL]
-        return _as_tool_output(
-            lambda: {
+
+        def fetch() -> dict:
+            quotes = self._finnhub.get_quotes(wanted)
+            state.quotes.update(quotes)
+            return {
                 symbol: {
                     "price": str(q.price),
                     "change_percent": str(q.change_percent),
                     "previous_close": str(q.previous_close),
                 }
-                for symbol, q in self._finnhub.get_quotes(wanted).items()
+                for symbol, q in quotes.items()
             }
-        )
+
+        return _as_tool_output(fetch)
 
     def company_news(self, state: AgentRunState, symbol: str, days: int = 7) -> str:
         days = min(max(days, 1), 30)

@@ -4,11 +4,11 @@ import {
   api,
   ApiError,
   type Activity,
-  type HistoryPoint,
   type Portfolio,
   type Run,
   type Settings,
   type Status,
+  type ValueHistory,
   type Watchlist,
 } from './api'
 import { Home } from './components/Home'
@@ -30,7 +30,8 @@ export default function App() {
   const [page, setPage] = useState<Page>('home')
   const [status, setStatus] = useState<Status | null>(null)
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
-  const [history, setHistory] = useState<HistoryPoint[]>([])
+  const [history, setHistory] = useState<ValueHistory>({ points: [], trades: [] })
+  const [openRunId, setOpenRunId] = useState<string | null>(null)
   const [watchlist, setWatchlist] = useState<Watchlist | null>(null)
   const [runs, setRuns] = useState<Run[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -194,18 +195,34 @@ export default function App() {
         <>
           <nav className="tabs">
             {TABS.map((t) => (
-              <button key={t.id} className={page === t.id ? 'active' : ''} onClick={() => setPage(t.id)}>
+              <button
+                key={t.id}
+                className={page === t.id ? 'active' : ''}
+                onClick={() => {
+                  setOpenRunId(null)
+                  setPage(t.id)
+                }}
+              >
                 {t.label}
               </button>
             ))}
           </nav>
           {page === 'home' && (
-            <Home portfolio={portfolio} history={history} runs={runs} running={running} onOpenLog={() => setPage('log')} />
+            <Home
+              portfolio={portfolio}
+              history={history}
+              runs={runs}
+              running={running}
+              onOpenLog={(runId) => {
+                setOpenRunId(runId ?? null)
+                setPage('log')
+              }}
+            />
           )}
           {page === 'log' && (
             <>
               <LiveRun activity={activity} />
-              <RunLog runs={runs} currency={currency} />
+              <RunLog runs={runs} currency={currency} openRunId={openRunId} />
             </>
           )}
           {page === 'watchlist' && <WatchlistView watchlist={watchlist} currency={currency} />}
