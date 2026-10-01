@@ -11,7 +11,7 @@ from trade_simulator.core.decision_log import MAX_WATCHLIST_SIZE
 from trade_simulator.core.errors import ConfigError
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS, REFRESH_RUN_LIMITS
-from trade_simulator.core.strategy import SECTION_WORD_LIMIT
+from trade_simulator.core.strategy import SECTION_WORD_LIMIT, StrategySection
 from trade_simulator.core.strategy_review import STRATEGY_REVIEW_MINIMUMS
 from trade_simulator.core.trading_rules import TradingRules
 
@@ -47,4 +47,15 @@ def _values(profile: ExchangeProfile) -> dict[str, str]:
         "section_word_limit": str(SECTION_WORD_LIMIT),
         "review_min_days": str(STRATEGY_REVIEW_MINIMUMS.trading_days),
         "review_min_runs": str(STRATEGY_REVIEW_MINIMUMS.trading_runs),
+        **_section_names(),
+    }
+
+
+def _section_names() -> dict[str, str]:
+    """Strategy section names as the answer formats spell them (D43): `$section_<name>` for each, and
+    `$strategy_sections` for the whole list. A renamed section breaks the prompt's placeholder, not a run."""
+    names = [f"`{section.value}`" for section in StrategySection]
+    return {
+        **{f"section_{section.name.lower()}": name for section, name in zip(StrategySection, names)},
+        "strategy_sections": ", ".join(names[:-1]) + f" or {names[-1]}",
     }

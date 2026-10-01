@@ -124,8 +124,8 @@ def test_the_current_strategy_is_shown_in_full_with_its_start():
     text = render_review_input(context())
 
     assert "Current strategy: v3, in use since 2026-09-12" in text
-    assert "- What I look for: V3 look" in text
-    assert "- My targets for this period: V3 targets" in text
+    assert "- What I look for (`what_i_look_for`): V3 look" in text
+    assert "- My targets for this period (`targets`): V3 targets" in text
 
 
 def test_the_scorecard_is_shown_as_computed():
@@ -154,7 +154,7 @@ def test_the_previous_version_is_in_full_and_older_ones_are_compact():
     text = render_review_input(context())
 
     assert "v2 (2026-08-18 to 2026-09-12):" in text
-    assert "  - Position size: V2 size" in text
+    assert "  - Position size (`position_size`): V2 size" in text
     assert "v1 (2026-08-04 to 2026-08-18):" in text
     assert "V1 look" not in text  # older versions are compact
 

@@ -16,6 +16,7 @@ from trade_simulator.adapters.openai_agents.toolbox import ResearchToolbox
 from trade_simulator.core.errors import ConfigError
 from trade_simulator.core.exchange_profile import US_PROFILE
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS, RunBudget
+from trade_simulator.core.strategy import StrategySection
 
 PROMPTS_DIR = Path(__file__).parents[2] / "prompts"
 
@@ -100,6 +101,18 @@ def test_the_strategy_review_is_the_trading_agent_with_no_tools():
     reviewer = agents.strategy_reviewer
     assert reviewer.name == "Trading Agent (strategy review)"
     assert (reviewer.tools, reviewer.mcp_servers, reviewer.model) == ([], [], "gpt-6-sol")
+
+
+def test_section_names_in_the_prompts_come_from_the_code():
+    library = PromptLibrary(PROMPTS_DIR)
+    names = [f"`{s.value}`" for s in StrategySection]
+
+    trading = library.render("trading_agent", US_PROFILE)
+    review = library.render("strategy_review", US_PROFILE)
+
+    assert ", ".join(names[:-1]) + f" or {names[-1]}" in trading
+    assert "`follows`" in trading and '`"deviation"`' in trading
+    assert all(f"- {name}:" in review for name in names)
 
 
 def test_the_review_prompt_states_the_real_limits():

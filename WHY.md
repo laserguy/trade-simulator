@@ -490,6 +490,14 @@
   - **Cash on value points:** average cash needs the cash held over time, which wasn't recorded. Older points have none; if none in the period, today's share is used.
 - **Alternatives considered:** Exactly at the close (the closing value might not be recorded yet); only full exits as closed trades (hides partial sells); rebuilding cash from the trade history (more code for the same number).
 
+**Update (2026-10-02): a failed first strategy, and section names from the code**
+- **Choice:** If the review a trading run starts to write the first strategy fails, the run trades without one and the next run tries again. The section names in the prompts are filled in from the code, each section is shown with its name in the input, and a test checks that the answer formats allow exactly the core sections.
+- **Why:**
+  - **Trade without one:** this only happens before any strategy exists. One bad answer shouldn't stall trading; the failed review is logged on the Strategy tab. Once v1 exists there is always a strategy (a later failed review keeps the current one).
+  - **Names from the code:** the user noticed the names were typed by hand in the code, the answer format and the prompts, which could drift apart. Placeholders and a test make a rename fail a test instead of breaking runs. The prompt wording stays in the prompt files (D25).
+  - **No memory:** the user asked whether the agent remembers its strategy. It doesn't; the app supplies it in every run's input, and the prompt now says so.
+- **Alternatives considered:** Skipping the trading run until a strategy exists (a broken model setup would stop trading entirely); keeping the hand-typed names (silent drift).
+
 **Update (2026-10-01): "targets" instead of "prediction"**
 - **Choice:** Section 5 is renamed *My targets for this period* (was *How I'll know it's working*); the review's verdict on it is **met / partly met / missed** (was came true / partly / didn't).
 - **Why:** The user asked what "prediction came true" meant; "targets" says the same thing more plainly. The targets are still set before the results exist, so the strategy is judged against what it promised. The verdict is the agent's judgement against the code's scorecard, not a code check (the targets are plain words); the user sees both in the history.

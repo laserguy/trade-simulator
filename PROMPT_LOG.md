@@ -71,6 +71,18 @@ Oldest first. Entries before 2026-09-27 come from the Changelog in PROBLEM_STATE
 - **Expected:** First review: a complete five-section strategy within the word limit. Later reviews: verdicts that match the scorecard, a keep or change that separates "didn't work" from "wasn't followed", and no return to an approach the history shows failed without a stated reason.
 - **Result:** Not seen yet.
 
+### 2026-10-02 · trading_agent.md · follow the strategy (D43)
+- **Line added:** The "# Your strategy" section: the strategy comes in the input, written by the agent in an earlier review; follow it; set `follows` to the section each order follows, or `"deviation"` with the reason; don't change the strategy here; null when there is no strategy. In "# Output": `follows` on each order, and one sentence in `summary` on how the run followed the strategy.
+- **Cause:** Built with D43. The section names come from the code (`$strategy_sections`), not typed by hand. "Given to you at the start of every run" was added after the user asked whether the agent remembers the strategy: it doesn't; the app supplies it each run.
+- **Expected:** Each order names a section or is marked as a deviation with a reason; the summary says how the run followed the strategy.
+- **Result:** Not seen yet.
+
+### 2026-10-02 · strategy_review.md · section names from the code (D43)
+- **Line changed:** The five section names in "What a strategy is" are now `$section_<name>` placeholders. The rendered text is unchanged.
+- **Cause:** The user pointed out that names typed by hand in the code, the answer format and the prompts could drift apart. A test now also checks that the answer formats allow exactly the core sections.
+- **Expected:** No change in behaviour; a renamed section fails a test instead of breaking runs.
+- **Result:** Not applicable.
+
 ## Open observations
 
 Problems seen in runs that have **not** led to a prompt change. A prompt change needs the same problem in at least three runs (see CLAUDE.md). Add the run each time it recurs.

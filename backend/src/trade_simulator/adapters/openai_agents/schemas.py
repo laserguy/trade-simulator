@@ -26,11 +26,16 @@ class ResearchReport(BaseModel):
     findings: list[ResearchFinding]
 
 
+SectionName = Literal["what_i_look_for", "position_size", "when_i_sell", "cash_and_pace", "targets"]
+
+
 class ProposedOrder(BaseModel):
     symbol: str
     side: Literal["buy", "sell"]
     quantity: int
     reason: str
+    # The strategy section the order follows, or "deviation"; null when there is no strategy yet (D43).
+    follows: Literal["what_i_look_for", "position_size", "when_i_sell", "cash_and_pace", "targets", "deviation"] | None
 
 
 class TradingDecision(BaseModel):
@@ -48,9 +53,6 @@ class WatchlistResult(BaseModel):
     market_overview: str
     market_sources: list[str]
     picks: list[WatchlistPick]
-
-
-SectionName = Literal["what_i_look_for", "position_size", "when_i_sell", "cash_and_pace", "targets"]
 
 
 class StrategyText(BaseModel):
@@ -106,7 +108,7 @@ def to_orders(decision: TradingDecision) -> tuple[list[Order], list[Finding]]:
     for proposed in decision.orders:
         reason, _ = split_links(proposed.reason)
         try:
-            orders.append(Order(proposed.symbol, Side(proposed.side), proposed.quantity, reason))
+            orders.append(Order(proposed.symbol, Side(proposed.side), proposed.quantity, reason, proposed.follows))
         except InvalidOrderError as exc:
             warnings.append(
                 Finding(

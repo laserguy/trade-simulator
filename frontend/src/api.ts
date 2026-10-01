@@ -92,6 +92,8 @@ export interface OrderRow {
   price: string | null
   fee: string | null
   rejection_reason: string | null
+  follows: string | null // the strategy section it followed, or 'deviation' (D43); null before strategies
+  follows_label: string | null
 }
 
 export interface Run {
@@ -111,6 +113,7 @@ export interface Run {
     estimated_usd: string | null
   }
   trace_url: string | null
+  strategy_version: number | null // the strategy the run followed (D43)
 }
 
 export interface ProviderStatus {

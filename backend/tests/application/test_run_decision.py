@@ -24,6 +24,8 @@ from trade_simulator.core.exchange_profile import US_PROFILE
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.portfolio import Portfolio, Position
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS
+from trade_simulator.core.strategy import Strategy, StrategySection, StrategyVersion
+from trade_simulator.core.strategy_review import ReviewDecision, ReviewTrigger, StrategyReview
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
 NOW = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)
@@ -41,7 +43,7 @@ def repo(tmp_path):
     return repository
 
 
-def make_runner(repo, agent, market=None, calendar=None, guard=None, activity=None):
+def make_runner(repo, agent, market=None, calendar=None, guard=None, activity=None, reviewer=None):
     return DecisionRunner(
         repository=repo,
         market_data=market or FakeMarketData({"AAPL": "200", "MSFT": "400"}),
@@ -52,7 +54,87 @@ def make_runner(repo, agent, market=None, calendar=None, guard=None, activity=No
         clock=FixedClock(NOW),
         id_factory=lambda: "run-1",
         activity=activity or ActivityFeed(clock=FixedClock(NOW)),
+        strategy_reviewer=reviewer,
     )
+
+
+STRATEGY = Strategy("Earnings momentum.", "Start at 6%.", "Sell when the reason breaks.", "Keep 15-30% cash.", "Beat SPY.")
+
+
+def save_strategy(repo, number=1):
+    review = StrategyReview(
+        id=f"rev-{number}", trigger=ReviewTrigger.BUTTON, started_at=NOW, finished_at=NOW, status=RunStatus.COMPLETED,
+        failure_reason=None, reviewed_version=None, decision=ReviewDecision.FIRST, reason="x", cost=RunCost(0, 0, 0),
+        trace_id=None,
+    )
+    repo.save_strategy_review(review, StrategyVersion(number, STRATEGY, NOW, None, f"rev-{number}"))
+
+
+class FakeReviewer:
+    """Writes the first strategy when asked, or fails like a review whose answer didn't pass the check."""
+
+    def __init__(self, repo, writes=True, error=None):
+        self.repo, self.writes, self.error = repo, writes, error
+        self.triggers = []
+
+    async def review(self, trigger):
+        self.triggers.append(trigger)
+        if self.error:
+            raise self.error
+        if self.writes:
+            save_strategy(self.repo)
+
+
+def test_the_agent_is_given_the_current_strategy_and_the_run_records_its_version(repo):
+    save_strategy(repo)
+    agent = FakeAgent(decision([Order("AAPL", Side.BUY, 5, "Rising estimates", StrategySection.WHAT_I_LOOK_FOR.value)]))
+
+    result = run(make_runner(repo, agent))
+
+    [context] = agent.decision_contexts
+    assert context.strategy.number == 1 and context.strategy.strategy == STRATEGY
+    assert result.strategy_version == 1
+    assert repo.get_run("run-1").order_results[0].order.follows == "what_i_look_for"
+
+
+def test_a_run_without_a_strategy_first_has_the_agent_write_one(repo):
+    reviewer = FakeReviewer(repo)
+    agent = FakeAgent(decision())
+
+    result = run(make_runner(repo, agent, reviewer=reviewer))
+
+    assert reviewer.triggers == [ReviewTrigger.AUTOMATIC]
+    assert agent.decision_contexts[0].strategy.number == 1
+    assert result.strategy_version == 1
+
+
+def test_if_the_first_strategy_fails_the_run_trades_without_one(repo):
+    reviewer = FakeReviewer(repo, writes=False)  # the review was logged as failed; no strategy saved
+    agent = FakeAgent(decision([Order("AAPL", Side.BUY, 5, "x", StrategySection.WHAT_I_LOOK_FOR.value)]))
+
+    result = run(make_runner(repo, agent, reviewer=reviewer))
+
+    assert result.status is RunStatus.COMPLETED
+    assert (agent.decision_contexts[0].strategy, result.strategy_version) == (None, None)
+    assert result.order_results[0].order.follows is None  # no strategy, so no section to follow
+
+
+def test_a_refused_first_review_does_not_stop_the_run(repo):
+    reviewer = FakeReviewer(repo, error=AgentError("model unreachable"))
+
+    result = run(make_runner(repo, FakeAgent(decision()), reviewer=reviewer))
+
+    assert result.status is RunStatus.COMPLETED
+
+
+def test_no_review_is_attempted_while_the_market_is_closed_or_a_strategy_exists(repo):
+    reviewer = FakeReviewer(repo)
+    with pytest.raises(MarketClosedError):
+        run(make_runner(repo, FakeAgent(decision()), calendar=FakeCalendar(open_=False), reviewer=reviewer))
+    save_strategy(repo)
+    run(make_runner(repo, FakeAgent(decision()), reviewer=reviewer))
+
+    assert reviewer.triggers == []
 
 
 def test_live_feed_shows_the_run_and_each_rules_check(repo):

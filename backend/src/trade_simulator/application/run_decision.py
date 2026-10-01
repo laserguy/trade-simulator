@@ -2,7 +2,9 @@
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Protocol
 from uuid import uuid4
 
 from trade_simulator.application.activity import NoActivity
@@ -22,9 +24,16 @@ from trade_simulator.core.decision_log import DecisionRun, RunStatus, RunTrigger
 from trade_simulator.core.errors import AgentError, MarketClosedError, RunInProgressError, TradeSimulatorError
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS
+from trade_simulator.core.strategy_review import ReviewTrigger
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, TradingRules, execute_orders
 
 logger = logging.getLogger(__name__)
+
+
+class StrategyWriter(Protocol):
+    """The strategy review use case, as seen by a trading run that finds no strategy (D43)."""
+
+    async def review(self, trigger: ReviewTrigger): ...
 
 ACTOR = "Simulator"
 RULES_ACTOR = "Rules check"
@@ -69,7 +78,9 @@ class DecisionRunner:
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         id_factory: Callable[[], str] = lambda: uuid4().hex,
         activity: ActivityReporter | None = None,
+        strategy_reviewer: StrategyWriter | None = None,
     ) -> None:
+        self._strategy_reviewer = strategy_reviewer
         self._repository = repository
         self._market_data = market_data
         self._calendar = calendar
@@ -83,6 +94,7 @@ class DecisionRunner:
 
     async def run(self, trigger: RunTrigger) -> DecisionRun:
         """Run once. Raises MarketClosedError / RunInProgressError for refused manual runs; logs everything else."""
+        await self._write_first_strategy_if_missing()
         started_at = self._clock()
         if not self._guard.try_acquire():
             if trigger is RunTrigger.MANUAL:
@@ -107,6 +119,18 @@ class DecisionRunner:
             self._activity.end()
             self._guard.release()
 
+    async def _write_first_strategy_if_missing(self) -> None:
+        """A trading run with no strategy first has the agent write one (D43). If that fails, the run still
+        trades, without a strategy; the failed review is logged by the review itself."""
+        if self._strategy_reviewer is None or self._repository.current_strategy() is not None:
+            return
+        if not self._calendar.is_open(self._clock()):
+            return  # the run itself will be refused
+        try:
+            await self._strategy_reviewer.review(ReviewTrigger.AUTOMATIC)
+        except TradeSimulatorError as exc:
+            logger.warning("First strategy not written before the run: %s", exc)
+
     async def _decide_and_trade(self, started_at: datetime, trigger: RunTrigger) -> DecisionRun:
         portfolio = load_or_create_portfolio(self._repository, self._profile)
         watchlist = self._repository.load_watchlist()
@@ -120,6 +144,7 @@ class DecisionRunner:
         benchmark = self._profile.benchmark_symbol
         fetched = self._market_data.get_prices(sorted(tradable | {benchmark}))
         prices = {symbol: price for symbol, price in fetched.items() if symbol in tradable}
+        strategy = self._repository.current_strategy()
 
         decision = await self._agent.decide(
             DecisionContext(
@@ -135,9 +160,12 @@ class DecisionRunner:
                 performance=performance_since_start(
                     portfolio, prices, self._profile, self._repository.load_benchmark_start(), fetched.get(benchmark)
                 ),
+                strategy=strategy,
             )
         )
-        report = execute_orders(portfolio, decision.orders, prices, watchlist.symbols, self._rules)
+        # Without a strategy there is no section to follow, whatever the agent wrote.
+        orders = decision.orders if strategy else tuple(replace(o, follows=None) for o in decision.orders)
+        report = execute_orders(portfolio, orders, prices, watchlist.symbols, self._rules)
         for result in report.results:
             self._activity.add(RULES_ACTOR, _rules_line(result))
 
@@ -152,6 +180,7 @@ class DecisionRunner:
             order_results=report.results,
             cost=cost_of(decision.usage),
             trace_id=decision.trace_id,
+            strategy_version=strategy.number if strategy else None,
         )
         self._repository.save_run(run, report.portfolio)
         return run

@@ -15,11 +15,11 @@ A strategy may be stricter than these rules, never looser.
 
 # What a strategy is
 Five sections in plain sentences, each at most $section_word_limit words:
-- `what_i_look_for`: which stocks you buy and why.
-- `position_size`: how much goes into one stock.
-- `when_i_sell`: taking profit, cutting losses, or a broken reason.
-- `cash_and_pace`: how much cash you hold and how fast you build positions.
-- `targets`: what you expect by the next review, specific enough to check against the scorecard
+- $section_what_i_look_for: which stocks you buy and why.
+- $section_position_size: how much goes into one stock.
+- $section_when_i_sell: taking profit, cutting losses, or a broken reason.
+- $section_cash_and_pace: how much cash you hold and how fast you build positions.
+- $section_targets: what you expect by the next review, specific enough to check against the scorecard
   (for example your return against SPY, a cash range, or how many sells your loss rule forces).
 Each version runs at least $review_min_days trading days and $review_min_runs trading runs before it
 is reviewed again.

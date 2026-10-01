@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from trade_simulator.application.ports import DecisionContext, RefreshContext
+from trade_simulator.core.strategy import StrategyVersion
 
 
 def render_decision_input(context: DecisionContext) -> str:
@@ -48,6 +49,8 @@ def render_decision_input(context: DecisionContext) -> str:
                 f'Your reason then: "{buy.reason}"'
             )
 
+    lines += ["", *render_strategy(context.strategy)]
+
     lines += ["", "Watchlist (you may only buy these):"]
     for entry in context.watchlist.entries:
         price = prices.get(entry.symbol)
@@ -69,6 +72,20 @@ def render_decision_input(context: DecisionContext) -> str:
         f"{context.limits.max_searches} web searches.",
     ]
     return "\n".join(lines)
+
+
+def render_strategy(version: StrategyVersion | None) -> list[str]:
+    """The strategy the run follows (D43), each section with the name an order's `follows` uses."""
+    if version is None:
+        return ["Your current strategy: none yet."]
+    return [
+        f"Your current strategy (v{version.number}, since {version.started_at.date().isoformat()}):",
+        *strategy_lines(version, indent=""),
+    ]
+
+
+def strategy_lines(version: StrategyVersion, indent: str) -> list[str]:
+    return [f"{indent}- {section.title} (`{section.value}`): {text}" for section, text in version.strategy.sections()]
 
 
 def render_research_note(context: DecisionContext) -> str:

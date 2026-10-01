@@ -5,8 +5,15 @@ import { duration, formatDateTime, formatMoney, formatPercent, formatUsdCost, mo
 import { runSections } from '../runSections'
 import { runAsText, TRIGGER_LABEL } from '../runText'
 
+interface Props {
+  runs: Run[]
+  currency: string
+  openRunId?: string | null
+  onOpenStrategy?: (version: number) => void // a run's strategy tag opens that version on the Strategy tab (D31, D44)
+}
+
 // `openRunId` expands that run and scrolls to it (a marker on the Home chart, D32); otherwise the newest is open.
-export function RunLog({ runs, currency, openRunId = null }: { runs: Run[]; currency: string; openRunId?: string | null }) {
+export function RunLog({ runs, currency, openRunId = null, onOpenStrategy }: Props) {
   useEffect(() => {
     if (openRunId) document.getElementById(`run-${openRunId}`)?.scrollIntoView({ block: 'start' })
   }, [openRunId])
@@ -21,13 +28,19 @@ export function RunLog({ runs, currency, openRunId = null }: { runs: Run[]; curr
   return (
     <>
       {runs.map((run, index) => (
-        <RunItem key={run.id} run={run} currency={currency} open={openRunId ? run.id === openRunId : index === 0} />
+        <RunItem
+          key={run.id}
+          run={run}
+          currency={currency}
+          open={openRunId ? run.id === openRunId : index === 0}
+          onOpenStrategy={onOpenStrategy}
+        />
       ))}
     </>
   )
 }
 
-function RunItem({ run, currency, open }: { run: Run; currency: string; open: boolean }) {
+function RunItem({ run, currency, open, onOpenStrategy }: { run: Run; currency: string; open: boolean; onOpenStrategy?: (version: number) => void }) {
   const executed = run.orders.filter((o) => o.status === 'executed').length
   const rejected = run.orders.length - executed
   const warnings = run.findings.reduce((n, f) => n + f.warnings.length, 0)
@@ -39,6 +52,19 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
         <span className="when">{formatDateTime(run.started_at)}</span>
         <span className="badge">{TRIGGER_LABEL[run.trigger]}</span>
         <span className={`badge ${run.status}`}>{run.status}</span>
+        {run.strategy_version !== null && (
+          <button
+            className="badge strategy-tag"
+            title="Open this strategy version on the Strategy tab"
+            onClick={(e) => {
+              e.preventDefault() // inside <summary>: don't open or close the row
+              e.stopPropagation()
+              onOpenStrategy?.(run.strategy_version as number)
+            }}
+          >
+            Strategy v{run.strategy_version}
+          </button>
+        )}
         <span className="grow muted">
           {run.trigger === 'refresh'
             ? 'Watchlist rebuilt'
@@ -73,6 +99,14 @@ function RunItem({ run, currency, open }: { run: Run; currency: string; open: bo
                   </span>
                   <QuoteChip finding={run.findings.find((f) => f.symbol === o.symbol && f.price !== null)} currency={currency} />
                   <span className={`badge ${o.status}`}>{o.status}</span>
+                  {o.follows_label && (
+                    <span
+                      className={`badge ${o.follows === 'deviation' ? 'mid' : ''}`}
+                      title={o.follows === 'deviation' ? 'The agent broke its strategy for this order; the reason says why' : 'The strategy section this order follows'}
+                    >
+                      {o.follows_label}
+                    </span>
+                  )}
                   {o.status === 'executed' ? (
                     <span className="muted num">
                       at {formatMoney(o.price, currency)} + {formatMoney(o.fee, currency)} fee

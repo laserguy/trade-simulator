@@ -252,6 +252,7 @@ class DecisionContext:
     # The agent's own past (D42): the buys behind each current holding, and how the portfolio is doing.
     holding_buys: Mapping[str, tuple[ExecutedTrade, ...]] = field(default_factory=dict)
     performance: Performance | None = None
+    strategy: StrategyVersion | None = None  # the strategy the run follows (D43); None before the first one
 
 
 @dataclass(frozen=True)

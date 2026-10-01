@@ -19,6 +19,7 @@ from trade_simulator.core.exchange_profile import US_PROFILE
 from trade_simulator.core.order import Side
 from trade_simulator.core.portfolio import Portfolio, Position
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS, REFRESH_RUN_LIMITS
+from trade_simulator.core.strategy import Strategy, StrategyVersion
 from trade_simulator.core.trading_rules import TradingRules
 
 NOW = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)
@@ -114,6 +115,21 @@ def test_decision_input_without_history_or_performance_stays_as_before():
 
     assert "Performance" not in text
     assert "Bought" not in text
+
+
+def test_decision_input_shows_the_current_strategy_with_each_section_name():
+    strategy = Strategy("Earnings momentum.", "Start at 6%.", "Sell when the reason breaks.", "Keep 15-30% cash.", "Beat SPY.")
+    version = StrategyVersion(3, strategy, datetime(2026, 9, 12, 20, 15, tzinfo=timezone.utc), None, "r")
+
+    text = render_decision_input(holding_context(strategy=version))
+
+    assert "Your current strategy (v3, since 2026-09-12):" in text
+    assert "- What I look for (`what_i_look_for`): Earnings momentum." in text
+    assert "- My targets for this period (`targets`): Beat SPY." in text
+
+
+def test_decision_input_says_when_there_is_no_strategy():
+    assert "Your current strategy: none yet." in render_decision_input(holding_context())
 
 
 def test_research_note_lists_each_holding_with_the_reason_it_was_bought():

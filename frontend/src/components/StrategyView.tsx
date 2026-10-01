@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { Scorecard, StrategyPage, StrategyReviewEntry } from '../api'
 import { comparisonText, formatDateTime, formatMoney, formatPercent, formatUsdCost, signClass, tokens } from '../format'
 import { closedTradeSummary, followedTone, resultLabel, reviewHint, targetsLabel, targetsTone } from '../strategy'
@@ -10,11 +11,16 @@ interface Props {
   timezone: string
   disabled: boolean // a run is in progress or no AI key
   onReview: () => void
+  focusVersion?: number | null // from a run's strategy tag: open the review that wrote this version
 }
 
 const TRIGGERS = { button: 'Button', scheduled: 'Scheduled', automatic: 'Automatic' }
 
-export function StrategyView({ page, currency, timezone, disabled, onReview }: Props) {
+export function StrategyView({ page, currency, timezone, disabled, onReview, focusVersion = null }: Props) {
+  useEffect(() => {
+    if (focusVersion) document.getElementById(`review-v${focusVersion}`)?.scrollIntoView({ block: 'start' })
+  }, [focusVersion, page])
+
   if (!page) return <div className="card"><div className="empty">Loading…</div></div>
   const { current, timing } = page
 
@@ -87,7 +93,12 @@ export function StrategyView({ page, currency, timezone, disabled, onReview }: P
           <span className="small muted">Newest first · click a row to open</span>
         </div>
         {page.reviews.map((entry, i) => (
-          <ReviewRow key={entry.id} entry={entry} currency={currency} open={i === 0} />
+          <ReviewRow
+            key={entry.id}
+            entry={entry}
+            currency={currency}
+            open={focusVersion ? entry.written_version === focusVersion : i === 0}
+          />
         ))}
       </div>
     </>
@@ -142,7 +153,7 @@ function ScoreTiles({ card, version, currency }: { card: Scorecard; version: num
 function ReviewRow({ entry, currency, open }: { entry: StrategyReviewEntry; currency: string; open: boolean }) {
   const failed = entry.status === 'failed'
   return (
-    <details className="run" open={open}>
+    <details className="run" open={open} id={entry.written_version ? `review-v${entry.written_version}` : undefined}>
       <summary>
         <span className="when">{formatDateTime(entry.started_at)}</span>
         <span className="badge">{TRIGGERS[entry.trigger]}</span>

@@ -39,6 +39,7 @@ export default function App() {
   const [runs, setRuns] = useState<Run[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [strategy, setStrategy] = useState<StrategyPage | null>(null)
+  const [strategyVersion, setStrategyVersion] = useState<number | null>(null) // opened from a run's tag (D44)
   const [activity, setActivity] = useState<Activity | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
@@ -206,6 +207,7 @@ export default function App() {
                 className={page === t.id ? 'active' : ''}
                 onClick={() => {
                   setOpenRunId(null)
+                  setStrategyVersion(null)
                   setPage(t.id)
                 }}
               >
@@ -228,7 +230,15 @@ export default function App() {
           {page === 'log' && (
             <>
               <LiveRun activity={activity} />
-              <RunLog runs={runs} currency={currency} openRunId={openRunId} />
+              <RunLog
+                runs={runs}
+                currency={currency}
+                openRunId={openRunId}
+                onOpenStrategy={(version) => {
+                  setStrategyVersion(version)
+                  setPage('strategy')
+                }}
+              />
             </>
           )}
           {page === 'watchlist' && <WatchlistView watchlist={watchlist} currency={currency} />}
@@ -239,6 +249,7 @@ export default function App() {
               timezone={status?.timezone ?? 'America/New_York'}
               disabled={running || noModel}
               onReview={() => start(api.reviewStrategy)}
+              focusVersion={strategyVersion}
             />
           )}
         </>

@@ -41,6 +41,7 @@ from trade_simulator.adapters.text_links import merge_sources, split_links
 from trade_simulator.core.decision_log import DecisionRun, Finding, RunCost, RunTrigger
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.model_pricing import ModelCatalogue
+from trade_simulator.core.strategy import DEVIATION, StrategySection
 from trade_simulator.core.strategy_review import ReviewTrigger, Scorecard
 from trade_simulator.core.trading_rules import TradingRules
 
@@ -116,6 +117,10 @@ def create_app(services: WebServices, frontend_dist: Path | None = None) -> Fast
                     start_in_background(lambda: services.decision_runner.run(trigger))
                 if due.snapshot:
                     await asyncio.to_thread(services.value_history.record)
+                # The weekly strategy review (D43); while another run is going it waits for a later tick.
+                reviewer = services.strategy_reviewer
+                if reviewer is not None and not services.guard.busy and reviewer.timing().due:
+                    start_in_background(lambda: reviewer.review(ReviewTrigger.SCHEDULED), record_value=False)
             except Exception:
                 logger.exception("Scheduler tick failed")
 
@@ -405,12 +410,22 @@ def _run_json(run: DecisionRun, catalogue: ModelCatalogue) -> dict:
                 "price": None if r.price is None else str(r.price),
                 "fee": None if r.fee is None else str(r.fee),
                 "rejection_reason": r.rejection_reason.value if r.rejection_reason else None,
+                "follows": r.order.follows,
+                "follows_label": _follows_label(r.order.follows),
             }
             for r in run.order_results
         ],
         "cost": _cost_json(run.cost, catalogue),
         "trace_url": TRACE_URL.format(run.trace_id) if run.trace_id else None,
+        "strategy_version": run.strategy_version,
     }
+
+
+def _follows_label(follows: str | None) -> str | None:
+    """The strategy section an order followed, as the user sees it (D31, D43)."""
+    if follows is None:
+        return None
+    return "Deviation" if follows == DEVIATION else StrategySection(follows).title
 
 
 def _cost_json(cost: RunCost, catalogue: ModelCatalogue) -> dict:

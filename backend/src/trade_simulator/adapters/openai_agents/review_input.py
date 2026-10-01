@@ -3,6 +3,7 @@ its orders, and every earlier version with the reasons it was kept or changed.""
 
 from decimal import Decimal
 
+from trade_simulator.adapters.openai_agents.inputs import strategy_lines
 from trade_simulator.application.ports import ReviewContext, ReviewedOrder
 from trade_simulator.core.decision_log import Watchlist
 from trade_simulator.core.portfolio import Portfolio
@@ -22,7 +23,7 @@ def render_review_input(context: ReviewContext) -> str:
         return "\n".join([*lines, "", "There is no strategy yet: write the first one."])
 
     lines += ["", f"Current strategy: v{current.number}, in use since {current.started_at.date().isoformat()}"]
-    lines += _sections(current, indent="")
+    lines += strategy_lines(current, indent="")
     lines += _scorecard(current, context.scorecard, currency)
     lines += _orders(context.orders)
     lines += _history(context)
@@ -59,10 +60,6 @@ def _market(context: ReviewContext) -> list[str]:
     if overview is None:
         return ["", "Latest market overview: none yet."]
     return ["", f"Latest market overview (from {overview.as_of.date().isoformat()}):", overview.summary]
-
-
-def _sections(version: StrategyVersion, indent: str) -> list[str]:
-    return [f"{indent}- {section.title}: {text}" for section, text in version.strategy.sections()]
 
 
 def _scorecard(version: StrategyVersion, card: Scorecard | None, currency: str) -> list[str]:
@@ -119,7 +116,7 @@ def _history(context: ReviewContext) -> list[str]:
             f"{version.ended_at.date().isoformat() if version.ended_at else '?'}):"
         )
         if version.number == current.number - 1:
-            lines += _sections(version, indent="  ")
+            lines += strategy_lines(version, indent="  ")
         for review in reversed(_reviews_of(context.reviews, version.number)):
             lines.append(_review_line(review))
             lines += _change_lines(review)

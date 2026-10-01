@@ -12,8 +12,9 @@ export const TRIGGER_LABEL: Record<Run['trigger'], string> = {
 export function runAsText(run: Run, currency: string): string {
   const overall = run.findings.find((f) => f.symbol === 'OVERALL' || f.symbol === 'MARKET')
   const research = run.findings.filter((f) => f !== overall)
+  const strategy = run.strategy_version ? ` · Strategy v${run.strategy_version}` : ''
   const lines = [
-    `Run ${run.started_at} · ${TRIGGER_LABEL[run.trigger]} · ${run.status} · ${duration(run.started_at, run.finished_at)}`,
+    `Run ${run.started_at} · ${TRIGGER_LABEL[run.trigger]} · ${run.status} · ${duration(run.started_at, run.finished_at)}${strategy}`,
   ]
 
   if (run.failure_reason) lines.push('', `Failed: ${run.failure_reason}`)
@@ -33,7 +34,8 @@ export function runAsText(run: Run, currency: string): string {
           o.status === 'executed'
             ? `executed at ${formatMoney(o.price, currency)} + ${formatMoney(o.fee, currency)} fee`
             : `rejected (${o.rejection_reason})`
-        lines.push(`- ${o.side.toUpperCase()} ${o.quantity} ${o.symbol}: ${result}. Reason: ${o.reason}`)
+        const basis = o.follows_label ? ` (${o.follows_label})` : ''
+        lines.push(`- ${o.side.toUpperCase()} ${o.quantity} ${o.symbol}${basis}: ${result}. Reason: ${o.reason}`)
       }
     }
   }

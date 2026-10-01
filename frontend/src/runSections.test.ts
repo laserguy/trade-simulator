@@ -19,6 +19,8 @@ const order = (symbol: string, side: OrderRow['side'] = 'buy'): OrderRow => ({
   price: '100',
   fee: '1',
   rejection_reason: null,
+  follows: null,
+  follows_label: null,
 })
 
 describe('runSections', () => {

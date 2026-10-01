@@ -179,7 +179,9 @@ def test_runs_are_listed_with_orders_findings_cost_and_trace_link(tmp_path):
     assert body["orders"][0] == {
         "symbol": "AAPL", "side": "buy", "quantity": 5, "reason": "Cheap",
         "status": "executed", "price": "200", "fee": "1", "rejection_reason": None,
+        "follows": None, "follows_label": None,
     }
+    assert body["strategy_version"] is None
     assert "20%" in body["orders"][1]["rejection_reason"] or "cap" in body["orders"][1]["rejection_reason"]
     assert body["findings"][0]["warnings"] == ["Unusual jump"]
     assert (body["findings"][0]["price"], body["findings"][0]["change_percent"]) == ("200", "-1.4")
@@ -351,6 +353,59 @@ def test_a_finished_run_adds_a_point_to_the_value_history(tmp_path):
             time.sleep(0.05)
 
     assert len(services.value_history.points()) == 1
+
+
+def test_a_run_shows_its_strategy_version_and_each_orders_section(tmp_path):
+    client, services = build(tmp_path)
+    follows = Order("AAPL", Side.BUY, 5, "Rising estimates", "what_i_look_for")
+    breaks = Order("MSFT", Side.SELL, 1, "Tariff news", "deviation")
+    services.repository.save_run(
+        DecisionRun(
+            id="r1", trigger=RunTrigger.DAILY, started_at=NOW, finished_at=NOW, status=RunStatus.COMPLETED,
+            failure_reason=None, findings=(),
+            order_results=(
+                OrderResult(follows, OrderStatus.EXECUTED, Decimal("200"), Decimal("1")),
+                OrderResult(breaks, OrderStatus.REJECTED, rejection_reason=RejectionReason.INSUFFICIENT_SHARES),
+            ),
+            cost=RunCost(0, 0, 0), trace_id=None, strategy_version=3,
+        ),
+        None,
+    )
+
+    [body] = client.get("/api/runs").json()
+
+    assert body["strategy_version"] == 3
+    assert [(o["follows"], o["follows_label"]) for o in body["orders"]] == [
+        ("what_i_look_for", "What I look for"), ("deviation", "Deviation"),
+    ]
+
+
+def test_the_scheduler_starts_a_due_strategy_review(tmp_path):
+    client, services = build(tmp_path)
+    started = datetime(2026, 9, 1, 14, 0, tzinfo=timezone.utc)
+    first = StrategyReview(
+        id="r1", trigger=ReviewTrigger.BUTTON, started_at=started, finished_at=started, status=RunStatus.COMPLETED,
+        failure_reason=None, reviewed_version=None, decision=ReviewDecision.FIRST, reason="x", cost=RunCost(0, 0, 0),
+        trace_id=None,
+    )
+    services.repository.save_strategy_review(first, StrategyVersion(1, FIRST_STRATEGY.new_strategy, started, None, "r1"))
+    for day in range(5):
+        at = started + timedelta(days=day, hours=1)
+        services.repository.save_run(
+            DecisionRun(id=f"d{day}", trigger=RunTrigger.DAILY, started_at=at, finished_at=at, status=RunStatus.COMPLETED,
+                        failure_reason=None, findings=(), order_results=(), cost=RunCost(0, 0, 0), trace_id=None,
+                        strategy_version=1),
+            None,
+        )
+    services.scheduler_tick_seconds = 0.01
+
+    with client:  # NOW is Monday 28 Sep: Friday's slot was missed, so the review catches up
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and len(services.repository.strategy_reviews()) < 2:
+            time.sleep(0.05)
+
+    scheduled = services.repository.strategy_reviews()[-1]
+    assert scheduled.trigger is ReviewTrigger.SCHEDULED
 
 
 def test_strategy_page_without_a_strategy_offers_the_first_one(client):

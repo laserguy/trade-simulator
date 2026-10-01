@@ -1,9 +1,11 @@
 from decimal import Decimal
+from typing import get_args
 
 from trade_simulator.adapters.openai_agents.schemas import (
     ProposedOrder,
     ResearchFinding,
     SectionChange,
+    SectionName,
     StrategyReviewResult,
     StrategyText,
     TradingDecision,
@@ -17,7 +19,7 @@ from trade_simulator.adapters.openai_agents.schemas import (
 )
 from trade_simulator.application.ports import AgentUsage, Quote
 from trade_simulator.core.order import Side
-from trade_simulator.core.strategy import StrategySection
+from trade_simulator.core.strategy import ORDER_BASES, StrategySection
 from trade_simulator.core.strategy_review import Followed, ReviewDecision, TargetsVerdict
 
 
@@ -68,9 +70,27 @@ def test_links_are_kept_out_of_the_review_text():
     assert "https://" not in proposal.reason
 
 
+def test_the_answer_formats_allow_exactly_the_core_sections():
+    sections = {s.value for s in StrategySection}
+
+    assert set(get_args(SectionName)) == sections
+    assert set(get_args(get_args(ProposedOrder.model_fields["follows"].annotation)[0])) == ORDER_BASES
+    assert set(StrategyText.model_fields) == sections
+
+
+def test_an_order_keeps_the_section_it_follows():
+    decision = TradingDecision(
+        orders=[ProposedOrder(symbol="AAPL", side="sell", quantity=1, reason="Broke", follows="deviation")], summary="s"
+    )
+
+    [order], _ = to_orders(decision)
+
+    assert order.follows == "deviation"
+
+
 def test_valid_proposed_orders_become_core_orders():
     decision = TradingDecision(
-        orders=[ProposedOrder(symbol="aapl", side="buy", quantity=3, reason="Cheap")], summary="s"
+        orders=[ProposedOrder(symbol="aapl", side="buy", quantity=3, reason="Cheap", follows=None)], summary="s"
     )
 
     orders, warnings = to_orders(decision)
@@ -81,7 +101,7 @@ def test_valid_proposed_orders_become_core_orders():
 
 def test_invalid_proposed_orders_are_ignored_with_a_warning():
     decision = TradingDecision(
-        orders=[ProposedOrder(symbol="AAPL", side="buy", quantity=0, reason="?")], summary="s"
+        orders=[ProposedOrder(symbol="AAPL", side="buy", quantity=0, reason="?", follows=None)], summary="s"
     )
 
     orders, warnings = to_orders(decision)

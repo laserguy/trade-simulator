@@ -59,6 +59,10 @@ def build_services(config: AppConfig, profile: ExchangeProfile = US_PROFILE) -> 
         activity=activity,
     )
     portfolio_viewer = PortfolioViewer(repository=repository, market_data=market_data, profile=profile)
+    strategy_reviewer = StrategyReviewRunner(
+        repository=repository, market_data=market_data, calendar=calendar,
+        agent=agents, profile=profile, guard=guard, activity=activity,
+    )
 
     return WebServices(
         profile=profile,
@@ -68,6 +72,7 @@ def build_services(config: AppConfig, profile: ExchangeProfile = US_PROFILE) -> 
         decision_runner=DecisionRunner(
             repository=repository, market_data=market_data, calendar=calendar,
             agent=agents, profile=profile, guard=guard, activity=activity,
+            strategy_reviewer=strategy_reviewer,  # writes the first strategy if a run finds none (D43)
         ),
         watchlist_refresher=refresher,
         initial_watchlist=InitialWatchlist(
@@ -82,10 +87,7 @@ def build_services(config: AppConfig, profile: ExchangeProfile = US_PROFILE) -> 
         price_history=_price_history(config, repository, profile),
         settings=settings,
         catalogue=catalogue,
-        strategy_reviewer=StrategyReviewRunner(
-            repository=repository, market_data=market_data, calendar=calendar,
-            agent=agents, profile=profile, guard=guard, activity=activity,
-        ),
+        strategy_reviewer=strategy_reviewer,
         strategy_viewer=StrategyViewer(repository=repository, market_data=market_data, calendar=calendar, profile=profile),
     )
 
