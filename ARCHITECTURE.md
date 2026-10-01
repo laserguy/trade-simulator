@@ -32,6 +32,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D40 market context in research | `adapters/finnhub_market_data.py` (`market_news`), `toolbox.py` and `agent_factory.py` (`get_market_news` tool), `application/ports.py` (`MarketOverview`, `Repository.latest_market_overview`), `application/run_decision.py`, `inputs.py`, `backend/prompts/*.md` |
 | D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
 | D42 agent's memory of its trades | `application/trade_memory.py` (buys behind each holding, performance line), `application/run_decision.py` (puts them in `DecisionContext`), `inputs.py` (writes them into the agent's starting text, and builds the holdings note), `agent_factory.py` (adds the note to every research request), `adapters/sqlite_repository.py` (`executed_trades`, with reasons) |
+| D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |
@@ -66,9 +67,11 @@ Money is stored as exact decimal text. New columns on existing tables go in `_AD
 | Table | Holds |
 |-------|-------|
 | `portfolio`, `positions` | Cash (a single row), and holdings with average cost |
-| `runs` | One row per run: trigger, status, failure reason, tokens, searches, model, trace ID |
+| `runs` | One row per run: trigger, status, failure reason, tokens, searches, model, trace ID, and the strategy version it followed (D43) |
 | `findings` | Research findings per run (`symbol` can also be `OVERALL` or `MARKET`, D22), with sources, warnings, and the stock's price and day change when it was quoted in the run |
-| `order_results` | Proposed orders per run, with executed price and fee, or the rejection reason |
+| `order_results` | Proposed orders per run, with executed price and fee, or the rejection reason, and the strategy section the order follows or `deviation` (D43) |
+| `strategy_reviews` | One row per strategy review, failed ones included: trigger, decision (first / keep / change), reason, verdicts on targets and following, why each section changed, the scorecard as shown (JSON), tokens, model, trace ID (D43) |
+| `strategy_versions` | Each strategy version: the five sections, start and end time (no end = current), and the review that wrote it (D43) |
 | `watchlist_meta`, `watchlist_entries` | The current watchlist with a reason and sources per stock |
 | `settings` | Key/value: `openai_api_key`, `anthropic_api_key`, `model_id`, `run_mode` |
 | `benchmark_start` | SPY price when tracking began (D23) |

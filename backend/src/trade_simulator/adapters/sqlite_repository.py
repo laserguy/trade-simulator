@@ -31,6 +31,17 @@ from trade_simulator.core.decision_log import (
 from trade_simulator.core.errors import StorageError
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.portfolio import Portfolio, Position
+from trade_simulator.core.strategy import Strategy, StrategySection, StrategyVersion
+from trade_simulator.core.strategy_review import (
+    ClosedTrade,
+    Followed,
+    HoldingResult,
+    ReviewDecision,
+    ReviewTrigger,
+    Scorecard,
+    StrategyReview,
+    TargetsVerdict,
+)
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
 _SCHEMA = """
@@ -54,7 +65,8 @@ CREATE TABLE IF NOT EXISTS runs (
     output_tokens INTEGER NOT NULL,
     searches INTEGER NOT NULL,
     trace_id TEXT,
-    model TEXT
+    model TEXT,
+    strategy_version INTEGER
 );
 CREATE INDEX IF NOT EXISTS runs_started_at ON runs (started_at);
 CREATE TABLE IF NOT EXISTS findings (
@@ -79,6 +91,7 @@ CREATE TABLE IF NOT EXISTS order_results (
     price TEXT,
     fee TEXT,
     rejection_reason TEXT,
+    strategy_section TEXT,
     PRIMARY KEY (run_id, seq)
 );
 CREATE TABLE IF NOT EXISTS watchlist_meta (
@@ -127,10 +140,46 @@ CREATE TABLE IF NOT EXISTS benchmark_start (
     price TEXT NOT NULL,
     started_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS strategy_reviews (
+    id TEXT PRIMARY KEY,
+    trigger TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    failure_reason TEXT,
+    reviewed_version INTEGER,
+    decision TEXT,
+    reason TEXT NOT NULL,
+    targets_verdict TEXT,
+    targets_note TEXT NOT NULL,
+    followed TEXT,
+    followed_note TEXT NOT NULL,
+    section_changes TEXT NOT NULL,
+    scorecard TEXT,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    model TEXT,
+    trace_id TEXT
+);
+CREATE TABLE IF NOT EXISTS strategy_versions (
+    number INTEGER PRIMARY KEY,
+    what_i_look_for TEXT NOT NULL,
+    position_size TEXT NOT NULL,
+    when_i_sell TEXT NOT NULL,
+    cash_and_pace TEXT NOT NULL,
+    targets TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    review_id TEXT NOT NULL REFERENCES strategy_reviews (id)
+);
 """
 
 # Columns added after the first release, applied to existing databases on start-up.
-_ADDED_COLUMNS = {"runs": {"model": "TEXT"}, "findings": {"price": "TEXT", "change_percent": "TEXT"}}
+_ADDED_COLUMNS = {
+    "runs": {"model": "TEXT", "strategy_version": "INTEGER"},
+    "findings": {"price": "TEXT", "change_percent": "TEXT"},
+    "order_results": {"strategy_section": "TEXT"},
+}
 
 
 class SqliteRepository:
@@ -300,6 +349,33 @@ class SqliteRepository:
             return None
         return MarketOverview(row["summary"], tuple(json.loads(row["sources"])), _from_iso(row["started_at"]))
 
+    # --- strategies (D43) ---
+
+    def save_strategy_review(self, review: StrategyReview, new_version: StrategyVersion | None) -> None:
+        with self._transaction() as conn:
+            _write_strategy_review(conn, review)
+            if new_version is not None:
+                conn.execute(
+                    "UPDATE strategy_versions SET ended_at = ? WHERE ended_at IS NULL",
+                    (_to_iso(new_version.started_at),),
+                )
+                _write_strategy_version(conn, new_version)
+
+    def current_strategy(self) -> StrategyVersion | None:
+        with self._transaction() as conn:
+            row = conn.execute("SELECT * FROM strategy_versions WHERE ended_at IS NULL").fetchone()
+        return _read_strategy_version(row) if row else None
+
+    def strategy_versions(self) -> list[StrategyVersion]:
+        with self._transaction() as conn:
+            rows = conn.execute("SELECT * FROM strategy_versions ORDER BY number").fetchall()
+        return [_read_strategy_version(row) for row in rows]
+
+    def strategy_reviews(self) -> list[StrategyReview]:
+        with self._transaction() as conn:
+            rows = conn.execute("SELECT * FROM strategy_reviews ORDER BY started_at").fetchall()
+        return [_read_strategy_review(row) for row in rows]
+
     # --- watchlist ---
 
     def load_watchlist(self) -> Watchlist | None:
@@ -362,8 +438,8 @@ def _write_portfolio(conn: sqlite3.Connection, portfolio: Portfolio) -> None:
 def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
     conn.execute(
         """INSERT INTO runs (id, trigger, started_at, finished_at, status, failure_reason,
-                             input_tokens, output_tokens, searches, trace_id, model)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                             input_tokens, output_tokens, searches, trace_id, model, strategy_version)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             run.id,
             run.trigger.value,
@@ -376,6 +452,7 @@ def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
             run.cost.searches,
             run.trace_id,
             run.cost.model,
+            run.strategy_version,
         ),
     )
     conn.executemany(
@@ -397,8 +474,8 @@ def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
     )
     conn.executemany(
         """INSERT INTO order_results (run_id, seq, symbol, side, quantity, reason, status,
-                                      price, fee, rejection_reason)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                      price, fee, rejection_reason, strategy_section)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 run.id,
@@ -411,6 +488,7 @@ def _write_run(conn: sqlite3.Connection, run: DecisionRun) -> None:
                 _decimal_text(r.price),
                 _decimal_text(r.fee),
                 r.rejection_reason.name if r.rejection_reason else None,
+                r.order.follows,
             )
             for seq, r in enumerate(run.order_results)
         ],
@@ -431,7 +509,7 @@ def _read_run(conn: sqlite3.Connection, row: sqlite3.Row) -> DecisionRun:
     )
     order_results = tuple(
         OrderResult(
-            order=Order(o["symbol"], Side(o["side"]), o["quantity"], o["reason"]),
+            order=Order(o["symbol"], Side(o["side"]), o["quantity"], o["reason"], o["strategy_section"]),
             status=OrderStatus(o["status"]),
             price=_decimal_or_none(o["price"]),
             fee=_decimal_or_none(o["fee"]),
@@ -450,6 +528,119 @@ def _read_run(conn: sqlite3.Connection, row: sqlite3.Row) -> DecisionRun:
         order_results=order_results,
         cost=RunCost(row["input_tokens"], row["output_tokens"], row["searches"], row["model"]),
         trace_id=row["trace_id"],
+        strategy_version=row["strategy_version"],
+    )
+
+
+def _write_strategy_review(conn: sqlite3.Connection, review: StrategyReview) -> None:
+    conn.execute(
+        """INSERT INTO strategy_reviews (id, trigger, started_at, finished_at, status, failure_reason,
+                                         reviewed_version, decision, reason, targets_verdict, targets_note,
+                                         followed, followed_note, section_changes, scorecard,
+                                         input_tokens, output_tokens, model, trace_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            review.id,
+            review.trigger.value,
+            _to_iso(review.started_at),
+            _to_iso(review.finished_at) if review.finished_at else None,
+            review.status.value,
+            review.failure_reason,
+            review.reviewed_version,
+            review.decision.value if review.decision else None,
+            review.reason,
+            review.targets_verdict.value if review.targets_verdict else None,
+            review.targets_note,
+            review.followed.value if review.followed else None,
+            review.followed_note,
+            json.dumps({section.value: why for section, why in review.section_changes.items()}),
+            json.dumps(_scorecard_to_json(review.scorecard)) if review.scorecard else None,
+            review.cost.input_tokens,
+            review.cost.output_tokens,
+            review.cost.model,
+            review.trace_id,
+        ),
+    )
+
+
+def _read_strategy_review(row: sqlite3.Row) -> StrategyReview:
+    return StrategyReview(
+        id=row["id"],
+        trigger=ReviewTrigger(row["trigger"]),
+        started_at=_from_iso(row["started_at"]),
+        finished_at=_from_iso(row["finished_at"]) if row["finished_at"] else None,
+        status=RunStatus(row["status"]),
+        failure_reason=row["failure_reason"],
+        reviewed_version=row["reviewed_version"],
+        decision=ReviewDecision(row["decision"]) if row["decision"] else None,
+        reason=row["reason"],
+        cost=RunCost(row["input_tokens"], row["output_tokens"], 0, row["model"]),
+        trace_id=row["trace_id"],
+        targets_verdict=TargetsVerdict(row["targets_verdict"]) if row["targets_verdict"] else None,
+        targets_note=row["targets_note"],
+        followed=Followed(row["followed"]) if row["followed"] else None,
+        followed_note=row["followed_note"],
+        section_changes={StrategySection(k): why for k, why in json.loads(row["section_changes"]).items()},
+        scorecard=_scorecard_from_json(json.loads(row["scorecard"])) if row["scorecard"] else None,
+    )
+
+
+def _write_strategy_version(conn: sqlite3.Connection, version: StrategyVersion) -> None:
+    conn.execute(
+        """INSERT INTO strategy_versions (number, what_i_look_for, position_size, when_i_sell, cash_and_pace,
+                                          targets, started_at, ended_at, review_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            version.number,
+            *(text for _, text in version.strategy.sections()),
+            _to_iso(version.started_at),
+            _to_iso(version.ended_at) if version.ended_at else None,
+            version.review_id,
+        ),
+    )
+
+
+def _read_strategy_version(row: sqlite3.Row) -> StrategyVersion:
+    return StrategyVersion(
+        number=row["number"],
+        strategy=Strategy(**{section.value: row[section.value] for section in StrategySection}),
+        started_at=_from_iso(row["started_at"]),
+        ended_at=_from_iso(row["ended_at"]) if row["ended_at"] else None,
+        review_id=row["review_id"],
+    )
+
+
+def _scorecard_to_json(card: Scorecard) -> dict:
+    return {
+        "period_start": _to_iso(card.period_start),
+        "period_end": _to_iso(card.period_end),
+        "portfolio_percent": str(card.portfolio_percent),
+        "benchmark_percent": str(card.benchmark_percent),
+        "trading_runs": card.trading_runs,
+        "trades": card.trades,
+        "fees": str(card.fees),
+        "closed_trades": [[t.symbol, str(t.gain)] for t in card.closed_trades],
+        "holdings": [[h.symbol, str(h.gain_percent)] for h in card.holdings],
+        "average_cash_percent": str(card.average_cash_percent),
+        "followed_orders": card.followed_orders,
+        "deviations": card.deviations,
+    }
+
+
+def _scorecard_from_json(data: dict) -> Scorecard:
+    return Scorecard(
+        period_start=_from_iso(data["period_start"]),
+        period_end=_from_iso(data["period_end"]),
+        portfolio_percent=Decimal(data["portfolio_percent"]),
+        benchmark_percent=Decimal(data["benchmark_percent"]),
+        trading_runs=data["trading_runs"],
+        trades=data["trades"],
+        fees=Decimal(data["fees"]),
+        closed_trades=tuple(ClosedTrade(symbol, Decimal(gain)) for symbol, gain in data["closed_trades"]),
+        holdings=tuple(HoldingResult(symbol, Decimal(gain)) for symbol, gain in data["holdings"]),
+        average_cash_percent=Decimal(data["average_cash_percent"]),
+        followed_orders=data["followed_orders"],
+        deviations=data["deviations"],
     )
 
 

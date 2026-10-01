@@ -11,6 +11,8 @@ from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.portfolio import Portfolio
 from trade_simulator.core.run_budget import RunLimits
+from trade_simulator.core.strategy import StrategyVersion
+from trade_simulator.core.strategy_review import StrategyReview
 from trade_simulator.core.trading_rules import TradingRules
 
 
@@ -53,6 +55,20 @@ class Repository(Protocol):
 
     def latest_market_overview(self) -> "MarketOverview | None":
         """The market overview of the newest completed watchlist refresh (D40)."""
+        ...
+
+    def save_strategy_review(self, review: StrategyReview, new_version: StrategyVersion | None) -> None:
+        """Save a review and, if it wrote one, the new version (ending the current one) all-or-nothing (D43)."""
+        ...
+
+    def current_strategy(self) -> StrategyVersion | None: ...
+
+    def strategy_versions(self) -> list[StrategyVersion]:
+        """Every version, oldest first."""
+        ...
+
+    def strategy_reviews(self) -> list[StrategyReview]:
+        """Every review, failed ones included, oldest first."""
         ...
 
 

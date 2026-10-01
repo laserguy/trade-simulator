@@ -57,6 +57,7 @@ class DecisionRun:
     order_results: tuple[OrderResult, ...]
     cost: RunCost
     trace_id: str | None
+    strategy_version: int | None = None  # the strategy the run followed (D43); None before strategies
 
 
 @dataclass(frozen=True)
