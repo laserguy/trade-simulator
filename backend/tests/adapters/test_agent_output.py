@@ -3,16 +3,69 @@ from decimal import Decimal
 from trade_simulator.adapters.openai_agents.schemas import (
     ProposedOrder,
     ResearchFinding,
+    SectionChange,
+    StrategyReviewResult,
+    StrategyText,
     TradingDecision,
     WatchlistPick,
     WatchlistResult,
     to_findings,
     to_market_overview,
     to_orders,
+    to_review_proposal,
     to_watchlist_entries,
 )
-from trade_simulator.application.ports import Quote
+from trade_simulator.application.ports import AgentUsage, Quote
 from trade_simulator.core.order import Side
+from trade_simulator.core.strategy import StrategySection
+from trade_simulator.core.strategy_review import Followed, ReviewDecision, TargetsVerdict
+
+
+def review_result(**changes):
+    fields = dict(
+        targets_verdict="partly_met",
+        targets_note="Behind SPY.",
+        followed="yes",
+        followed_note="Every order named a section.",
+        decision="change",
+        reason="Sizing was too large.",
+        new_strategy=StrategyText(
+            what_i_look_for="Earnings momentum.",
+            position_size="Start at 4%.",
+            when_i_sell="Sell when the reason breaks.",
+            cash_and_pace="Keep 10-25% cash.",
+            targets="Ahead of SPY.",
+        ),
+        section_changes=[SectionChange(section="position_size", why="Two buys fell together.")],
+    )
+    return StrategyReviewResult(**{**fields, **changes})
+
+
+def test_a_review_answer_becomes_a_review_proposal():
+    usage = AgentUsage(100, 20, 0, "gpt-6-luna")
+
+    proposal = to_review_proposal(review_result(), usage, "trace_r")
+
+    assert (proposal.decision, proposal.targets_verdict, proposal.followed) == (
+        ReviewDecision.CHANGE, TargetsVerdict.PARTLY_MET, Followed.YES
+    )
+    assert proposal.new_strategy.position_size == "Start at 4%."
+    assert proposal.section_changes == {StrategySection.POSITION_SIZE: "Two buys fell together."}
+    assert (proposal.usage, proposal.trace_id) == (usage, "trace_r")
+
+
+def test_a_keep_answer_has_no_strategy_and_the_first_has_no_verdicts():
+    keep = to_review_proposal(review_result(decision="keep", new_strategy=None, section_changes=[]), None, None)
+    first = to_review_proposal(review_result(targets_verdict=None, followed=None), None, None)
+
+    assert (keep.decision, keep.new_strategy) == (ReviewDecision.KEEP, None)
+    assert (first.targets_verdict, first.followed) == (None, None)
+
+
+def test_links_are_kept_out_of_the_review_text():
+    proposal = to_review_proposal(review_result(reason="See [this](https://x.com/a) for why."), None, None)
+
+    assert "https://" not in proposal.reason
 
 
 def test_valid_proposed_orders_become_core_orders():

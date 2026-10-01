@@ -6,6 +6,7 @@ from enum import Enum
 
 # What an order names instead of a section when it breaks the strategy on purpose (D43).
 DEVIATION = "deviation"
+SECTION_WORD_LIMIT = 60
 
 
 class StrategySection(Enum):
@@ -47,6 +48,18 @@ class Strategy:
 
     def sections(self) -> list[tuple[StrategySection, str]]:
         return [(section, self.text(section)) for section in StrategySection]
+
+
+def strategy_problems(strategy: Strategy, word_limit: int = SECTION_WORD_LIMIT) -> list[str]:
+    """Why a written strategy can't be saved: an empty section, or one over the word limit."""
+    problems = []
+    for section, text in strategy.sections():
+        words = len(text.split())
+        if words == 0:
+            problems.append(f"{section.title} is empty")
+        elif words > word_limit:
+            problems.append(f"{section.title} has {words} words; the limit is {word_limit}")
+    return problems
 
 
 @dataclass(frozen=True)

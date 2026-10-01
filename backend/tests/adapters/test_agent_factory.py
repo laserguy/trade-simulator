@@ -33,7 +33,7 @@ def make_agents(mcp=None, models=None):
 def test_every_prompt_file_renders_with_exchange_values():
     library = PromptLibrary(PROMPTS_DIR)
 
-    for name in ("trading_agent", "research_agent", "refresh_watchlist"):
+    for name in ("trading_agent", "research_agent", "refresh_watchlist", "strategy_review"):
         text = library.render(name, US_PROFILE)
         assert "$" not in text.replace("$1", "")  # no unfilled $placeholders
         assert text.strip()
@@ -94,6 +94,22 @@ def test_watchlist_builder_is_the_research_agent_with_refresh_instructions():
     assert "watchlist" in agents.watchlist_builder.instructions.lower()
 
 
+def test_the_strategy_review_is_the_trading_agent_with_no_tools():
+    agents = make_agents(models=AgentModels(trading="gpt-6-sol", research="gpt-6-luna"))
+
+    reviewer = agents.strategy_reviewer
+    assert reviewer.name == "Trading Agent (strategy review)"
+    assert (reviewer.tools, reviewer.mcp_servers, reviewer.model) == ([], [], "gpt-6-sol")
+
+
+def test_the_review_prompt_states_the_real_limits():
+    text = PromptLibrary(PROMPTS_DIR).render("strategy_review", US_PROFILE)
+
+    assert "at most 60 words" in text
+    assert "at least 10 trading days and 5 trading runs" in text
+    assert "20%" in text
+
+
 def test_mcp_servers_are_attached_per_agent():
     server = MCPServerStdio(params={"command": "c"}, name="market")
     agents = make_agents(McpServers([(server, frozenset({"research"}))]))
@@ -101,3 +117,4 @@ def test_mcp_servers_are_attached_per_agent():
     assert agents.research.mcp_servers == [server]
     assert agents.watchlist_builder.mcp_servers == [server]
     assert agents.trading.mcp_servers == []
+    assert agents.strategy_reviewer.mcp_servers == []

@@ -19,6 +19,7 @@ from trade_simulator.application.activity import ActivityFeed
 from trade_simulator.application.initial_watchlist import InitialWatchlist
 from trade_simulator.application.portfolio_view import PortfolioViewer
 from trade_simulator.application.refresh_watchlist import WatchlistRefresher
+from trade_simulator.application.review_strategy import StrategyReviewRunner
 from trade_simulator.application.run_decision import DecisionRunner
 from trade_simulator.application.run_guard import RunGuard
 from trade_simulator.application.ports import WebSearch
@@ -80,6 +81,10 @@ def build_services(config: AppConfig, profile: ExchangeProfile = US_PROFILE) -> 
         price_history=_price_history(config, repository, profile),
         settings=settings,
         catalogue=catalogue,
+        strategy_reviewer=StrategyReviewRunner(
+            repository=repository, market_data=market_data, calendar=calendar,
+            agent=agents, profile=profile, guard=guard, activity=activity,
+        ),
     )
 
 

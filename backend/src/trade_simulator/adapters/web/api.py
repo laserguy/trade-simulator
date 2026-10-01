@@ -25,6 +25,7 @@ from trade_simulator.application.portfolio_view import PortfolioSnapshot, Portfo
 from trade_simulator.application.price_history import PriceHistoryService
 from trade_simulator.application.ports import MarketCalendar, Repository
 from trade_simulator.application.refresh_watchlist import WatchlistRefresher
+from trade_simulator.application.review_strategy import StrategyReviewRunner
 from trade_simulator.application.run_decision import DecisionRunner
 from trade_simulator.application.run_cost_estimate import estimate_modes
 from trade_simulator.application.run_guard import RunGuard
@@ -66,6 +67,7 @@ class WebServices:
     price_history: PriceHistoryService | None  # None when no price history provider is set up (D36)
     settings: SettingsService
     catalogue: ModelCatalogue
+    strategy_reviewer: StrategyReviewRunner | None = None  # the Trading Agent's strategy reviews (D43)
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(timezone.utc))
     scheduler_tick_seconds: float = 10.0
 

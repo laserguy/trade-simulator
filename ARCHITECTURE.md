@@ -15,7 +15,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | Adapters | `adapters/` | `application`, `core`, third-party libraries | SQLite, Finnhub, Tavily, Tiingo, exchange calendar, OpenAI Agents SDK, FastAPI, config, logging |
 
 - **Wiring:** `adapters/bootstrap.py` is the only place that knows every concrete adapter. It builds the services from config.
-- **Entry points:** `cli.py` (`trade-sim serve|status|refresh|run`) and `adapters/web/api.py` (`create_app`).
+- **Entry points:** `cli.py` (`trade-sim serve|status|refresh|run|review`) and `adapters/web/api.py` (`create_app`).
 - **Startup (`api.py` lifespan):** it builds the first watchlist if needed (D4), fills the price cache in the background (D36), and starts the scheduler loop (D3, D33). The loop checks every 10 seconds.
 
 ## Where each decision lives
@@ -32,7 +32,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D40 market context in research | `adapters/finnhub_market_data.py` (`market_news`), `toolbox.py` and `agent_factory.py` (`get_market_news` tool), `application/ports.py` (`MarketOverview`, `Repository.latest_market_overview`), `application/run_decision.py`, `inputs.py`, `backend/prompts/*.md` |
 | D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
 | D42 agent's memory of its trades | `application/trade_memory.py` (buys behind each holding, performance line), `application/run_decision.py` (puts them in `DecisionContext`), `inputs.py` (writes them into the agent's starting text, and builds the holdings note), `agent_factory.py` (adds the note to every research request), `adapters/sqlite_repository.py` (`executed_trades`, with reasons) |
-| D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `application/strategy_scorecard.py` (a version's results, computed by code), `application/strategy_timing.py` (minimums, when a review may run, the weekly slot and catch-up), `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`, `runs_following`) |
+| D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `application/strategy_scorecard.py` (a version's results, computed by code), `application/strategy_timing.py` (minimums, when a review may run, the weekly slot and catch-up), `application/review_strategy.py` (the review use case: context, code check of the answer, all-or-nothing save, failed reviews logged), `adapters/openai_agents/review_input.py` (the review's starting text: scorecard, orders, version history), `schemas.py` (`StrategyReviewResult`), `agent_factory.py` (`strategy_reviewer`: the Trading Agent with no tools), `trading_agents.py` (`review_strategy`), `backend/prompts/strategy_review.md`, `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`, `runs_following`), `cli.py` (`trade-sim review`) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |

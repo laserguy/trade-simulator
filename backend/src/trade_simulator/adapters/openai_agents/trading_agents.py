@@ -19,12 +19,14 @@ from trade_simulator.adapters.openai_agents.inputs import (
 from trade_simulator.adapters.openai_agents.mcp_config import McpServers
 from trade_simulator.adapters.openai_agents.models import make_model
 from trade_simulator.adapters.openai_agents.prompts import PromptLibrary
+from trade_simulator.adapters.openai_agents.review_input import render_review_input
 from trade_simulator.adapters.openai_agents.schemas import (
     TradingDecision,
     WatchlistResult,
     to_decision_summary,
     to_market_overview,
     to_orders,
+    to_review_proposal,
     to_watchlist_entries,
 )
 from trade_simulator.adapters.openai_agents.run_hooks import AgentRunHooks
@@ -36,15 +38,18 @@ from trade_simulator.application.ports import (
     AgentDecision,
     DecisionContext,
     RefreshContext,
+    ReviewContext,
+    ReviewProposal,
     WatchlistProposal,
 )
 from trade_simulator.application.settings import ModelSelection
 from trade_simulator.core.errors import AgentError
 from trade_simulator.core.exchange_profile import ExchangeProfile
-from trade_simulator.core.run_budget import RunBudget, RunLimits
+from trade_simulator.core.run_budget import STRATEGY_REVIEW_LIMITS, RunBudget, RunLimits
 
 TRADING_MAX_TURNS = 10
 REFRESH_MAX_TURNS = 40  # a refresh makes many free tool calls while shortlisting
+REVIEW_MAX_TURNS = 2  # one answer, no tools (D43)
 
 
 class OpenAITradingAgents:
@@ -112,12 +117,22 @@ class OpenAITradingAgents:
         )
         return agents, state
 
-    async def _run(self, workflow: str, agent: Agent, input_text: str, state: AgentRunState, max_turns: int):
+    async def review_strategy(self, context: ReviewContext) -> ReviewProposal:
+        agents, state = self._prepare(STRATEGY_REVIEW_LIMITS)
+        result, trace_id = await self._run(
+            "Strategy review", agents.strategy_reviewer, render_review_input(context), state, REVIEW_MAX_TURNS,
+            use_mcp=False,
+        )
+        return to_review_proposal(result, state.usage(), trace_id)
+
+    async def _run(
+        self, workflow: str, agent: Agent, input_text: str, state: AgentRunState, max_turns: int, use_mcp: bool = True
+    ):
         trace_id = gen_trace_id()
         tracing_on = not state.run_config.tracing_disabled
         try:
             async with AsyncExitStack() as stack:
-                for server in self._mcp_servers.all():
+                for server in self._mcp_servers.all() if use_mcp else ():
                     await stack.enter_async_context(server)
                 with trace(workflow, trace_id=trace_id, disabled=not tracing_on):
                     result = await Runner.run(

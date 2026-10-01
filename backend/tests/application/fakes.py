@@ -63,12 +63,14 @@ class WeekdayCalendar:
 class FakeAgent:
     """Returns scripted decisions; records what it was asked."""
 
-    def __init__(self, decision=None, proposal=None, error=None):
+    def __init__(self, decision=None, proposal=None, error=None, review=None):
         self.decision = decision
         self.proposal = proposal
         self.error = error
+        self.review = review
         self.decision_contexts = []
         self.refresh_contexts = []
+        self.review_contexts = []
 
     async def decide(self, context):
         self.decision_contexts.append(context)
@@ -81,6 +83,12 @@ class FakeAgent:
         if self.error:
             raise self.error
         return self.proposal
+
+    async def review_strategy(self, context):
+        self.review_contexts.append(context)
+        if self.error:
+            raise self.error
+        return self.review
 
 
 class FakeUniverse:

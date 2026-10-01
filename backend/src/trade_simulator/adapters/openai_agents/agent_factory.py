@@ -10,6 +10,7 @@ from trade_simulator.adapters.openai_agents.mcp_config import McpServers
 from trade_simulator.adapters.openai_agents.prompts import PromptLibrary
 from trade_simulator.adapters.openai_agents.schemas import (
     ResearchReport,
+    StrategyReviewResult,
     TradingDecision,
     WatchlistResult,
     to_findings,
@@ -27,6 +28,7 @@ class AgentSet:
     trading: Agent
     research: Agent
     watchlist_builder: Agent
+    strategy_reviewer: Agent  # the Trading Agent reviewing its own strategy: same model, no tools (D43)
 
 
 @dataclass(frozen=True)
@@ -70,7 +72,15 @@ def build_agents(
         mcp_servers=mcp_servers.for_agent("trading"),
         output_type=TradingDecision,
     )
-    return AgentSet(trading=trading, research=research, watchlist_builder=watchlist_builder)
+    strategy_reviewer = Agent(
+        name="Trading Agent (strategy review)",
+        instructions=prompts.render("strategy_review", profile),
+        model=models.trading,
+        output_type=StrategyReviewResult,
+    )
+    return AgentSet(
+        trading=trading, research=research, watchlist_builder=watchlist_builder, strategy_reviewer=strategy_reviewer
+    )
 
 
 def _research_tools(toolbox: ResearchToolbox) -> list:

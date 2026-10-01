@@ -7,10 +7,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 from trade_simulator.adapters.text_links import keep_known, merge_sources, split_links
-from trade_simulator.application.ports import Quote
+from trade_simulator.application.ports import AgentUsage, Quote, ReviewProposal
 from trade_simulator.core.decision_log import Finding, WatchlistEntry
 from trade_simulator.core.errors import InvalidOrderError
 from trade_simulator.core.order import Order, Side
+from trade_simulator.core.strategy import Strategy, StrategySection
+from trade_simulator.core.strategy_review import Followed, ReviewDecision, TargetsVerdict
 
 
 class ResearchFinding(BaseModel):
@@ -46,6 +48,56 @@ class WatchlistResult(BaseModel):
     market_overview: str
     market_sources: list[str]
     picks: list[WatchlistPick]
+
+
+SectionName = Literal["what_i_look_for", "position_size", "when_i_sell", "cash_and_pace", "targets"]
+
+
+class StrategyText(BaseModel):
+    what_i_look_for: str
+    position_size: str
+    when_i_sell: str
+    cash_and_pace: str
+    targets: str
+
+
+class SectionChange(BaseModel):
+    section: SectionName
+    why: str
+
+
+class StrategyReviewResult(BaseModel):
+    targets_verdict: Literal["met", "partly_met", "missed"] | None
+    targets_note: str
+    followed: Literal["yes", "partly", "no"] | None
+    followed_note: str
+    decision: Literal["keep", "change"]
+    reason: str
+    new_strategy: StrategyText | None
+    section_changes: list[SectionChange]
+
+
+def to_review_proposal(result: StrategyReviewResult, usage: AgentUsage | None, trace_id: str | None) -> ReviewProposal:
+    """Converts the answer as given; the review use case checks it before anything is saved (D43)."""
+    new_strategy = None
+    if result.new_strategy is not None:
+        new_strategy = Strategy(**{name: _plain(text) for name, text in result.new_strategy.model_dump().items()})
+    return ReviewProposal(
+        decision=ReviewDecision(result.decision),
+        reason=_plain(result.reason),
+        new_strategy=new_strategy,
+        section_changes={StrategySection(c.section): _plain(c.why) for c in result.section_changes},
+        targets_verdict=TargetsVerdict(result.targets_verdict) if result.targets_verdict else None,
+        targets_note=_plain(result.targets_note),
+        followed=Followed(result.followed) if result.followed else None,
+        followed_note=_plain(result.followed_note),
+        usage=usage,
+        trace_id=trace_id,
+    )
+
+
+def _plain(text: str) -> str:
+    return split_links(text)[0]
 
 
 def to_orders(decision: TradingDecision) -> tuple[list[Order], list[Finding]]:

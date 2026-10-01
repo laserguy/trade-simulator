@@ -65,6 +65,12 @@ Oldest first. Entries before 2026-09-27 come from the Changelog in PROBLEM_STATE
 - **Expected:** Each run compares today's research with the original reason before holding or selling.
 - **Result:** Partly worked. Run 2026-09-30 13:50 showed no review of holdings. Run 13:55 held "because research found no material thesis break", but the Trading Agent had asked the Research Agent to judge without passing on the reasons, so nothing compared the news with the actual reasons. Fixed in code the same day, not in the prompt: the app now adds the holdings and their reasons to every research request (D42 update). Run 2026-09-30 14:32, the first with that fix: worked. The findings for the holdings addressed the actual reasons (JPM's P/E and yield re-checked against the figures in the reason; ABBV's launch timing; MSFT's Copilot release confirmed; a new competitive risk found for NVDA), and the Trading Agent's summary weighed them by name. WMT was the weak one: its reason was "relative resilience in the weaker market" and the finding did not compare it with the market. The Research Agent gave no buy/sell/hold verdict; it did write assessments such as "leave the buyback rationale intact". Cost rose: 115k input tokens and all 5 web searches, against 80k and 4 two runs earlier.
 
+### 2026-10-02 · strategy_review.md · new prompt (D43)
+- **Line:** The whole file: role (the Trading Agent reviewing its own strategy, not trading), the goal and rules repeated from the trading prompt, the five sections with the word limit, the review order (targets verdict, followed verdict, keep or change, per-section reasons), "don't recompute or dispute the scorecard", "a short period is mostly noise", and the output fields.
+- **Cause:** Built with D43. No run yet.
+- **Expected:** First review: a complete five-section strategy within the word limit. Later reviews: verdicts that match the scorecard, a keep or change that separates "didn't work" from "wasn't followed", and no return to an approach the history shows failed without a stated reason.
+- **Result:** Not seen yet.
+
 ## Open observations
 
 Problems seen in runs that have **not** led to a prompt change. A prompt change needs the same problem in at least three runs (see CLAUDE.md). Add the run each time it recurs.

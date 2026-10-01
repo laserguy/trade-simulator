@@ -2,7 +2,13 @@ import pytest
 
 from trade_simulator.core.errors import InvalidOrderError
 from trade_simulator.core.order import Order, Side
-from trade_simulator.core.strategy import DEVIATION, Strategy, StrategySection
+from trade_simulator.core.strategy import (
+    DEVIATION,
+    SECTION_WORD_LIMIT,
+    Strategy,
+    StrategySection,
+    strategy_problems,
+)
 
 
 def make_strategy():
@@ -40,6 +46,22 @@ def test_section_titles_are_the_ones_the_user_sees():
 
 def test_strategy_text_can_be_read_per_section():
     assert make_strategy().text(StrategySection.WHEN_I_SELL).startswith("Sell when")
+
+
+def test_a_complete_strategy_within_the_word_limit_has_no_problems():
+    assert strategy_problems(make_strategy()) == []
+
+
+def test_an_empty_section_is_a_problem():
+    strategy = Strategy(**{**make_strategy().__dict__, "when_i_sell": "  "})
+
+    assert strategy_problems(strategy) == ["When I sell is empty"]
+
+
+def test_a_section_over_the_word_limit_is_a_problem():
+    strategy = Strategy(**{**make_strategy().__dict__, "targets": " ".join(["word"] * (SECTION_WORD_LIMIT + 1))})
+
+    assert strategy_problems(strategy) == [f"My targets for this period has 61 words; the limit is {SECTION_WORD_LIMIT}"]
 
 
 def test_an_order_may_name_the_section_it_follows():

@@ -11,9 +11,9 @@ from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.portfolio import Portfolio
 from trade_simulator.core.run_budget import RunLimits
-from trade_simulator.core.strategy import StrategyVersion
-from trade_simulator.core.strategy_review import StrategyReview
-from trade_simulator.core.trading_rules import TradingRules
+from trade_simulator.core.strategy import Strategy, StrategySection, StrategyVersion
+from trade_simulator.core.strategy_review import Followed, ReviewDecision, Scorecard, StrategyReview, TargetsVerdict
+from trade_simulator.core.trading_rules import OrderResult, TradingRules
 
 
 class Repository(Protocol):
@@ -279,6 +279,48 @@ class WatchlistProposal:
     trace_id: str | None
 
 
+@dataclass(frozen=True)
+class ReviewedOrder:
+    """An order from the period under review, with what happened to it (D43)."""
+
+    at: datetime  # when its run started
+    result: OrderResult
+
+
+@dataclass(frozen=True)
+class ReviewContext:
+    """What a strategy review is given (D43). Read from the database or computed by code; no research."""
+
+    profile: ExchangeProfile
+    rules: TradingRules
+    now: datetime
+    portfolio: Portfolio
+    prices: Mapping[str, Decimal]
+    watchlist: Watchlist | None
+    market_overview: MarketOverview | None
+    current: StrategyVersion | None  # None for the first review
+    scorecard: Scorecard | None
+    orders: tuple[ReviewedOrder, ...]  # every order in the current version's period, rejected ones included
+    versions: tuple[StrategyVersion, ...]  # all, oldest first
+    reviews: tuple[StrategyReview, ...]  # completed ones, oldest first
+
+
+@dataclass(frozen=True)
+class ReviewProposal:
+    """The Trading Agent's answer in a review, before the code checks it."""
+
+    decision: ReviewDecision  # KEEP or CHANGE; the use case records the first review as FIRST
+    reason: str
+    new_strategy: Strategy | None
+    section_changes: Mapping[StrategySection, str]
+    targets_verdict: TargetsVerdict | None
+    targets_note: str
+    followed: Followed | None
+    followed_note: str
+    usage: AgentUsage
+    trace_id: str | None
+
+
 class TradingAgents(Protocol):
     """The Trading Agent plus its Research Agent (D12). Proposes only; never touches the portfolio (D20).
 
@@ -288,3 +330,7 @@ class TradingAgents(Protocol):
     async def decide(self, context: DecisionContext) -> AgentDecision: ...
 
     async def build_watchlist(self, context: RefreshContext) -> WatchlistProposal: ...
+
+    async def review_strategy(self, context: ReviewContext) -> ReviewProposal:
+        """The Trading Agent reviews (or first writes) its own strategy: one call, no tools (D43)."""
+        ...

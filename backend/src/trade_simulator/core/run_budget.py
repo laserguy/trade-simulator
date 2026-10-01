@@ -13,6 +13,7 @@ class RunLimits:
 
 DECISION_RUN_LIMITS = RunLimits(max_searches=5, max_research_calls=3)
 REFRESH_RUN_LIMITS = RunLimits(max_searches=20, max_research_calls=None)
+STRATEGY_REVIEW_LIMITS = RunLimits(max_searches=0, max_research_calls=0)  # one AI call, no tools (D43)
 
 
 class RunBudget:

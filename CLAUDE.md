@@ -28,7 +28,7 @@ Prompts are not tuned run by run; that goes in circles. Before changing anything
 - Doc drift check: `cd backend && uv run pytest tests/test_docs_in_sync.py`. It also runs automatically as a Stop hook (`.claude/settings.json` → `.claude/hooks/check-docs.sh`) and blocks finishing a turn while the docs don't match the code. Fix the docs, not the test.
 - Run opt-in tests against real APIs (needs keys in `backend/.env`; costs a little): `cd backend && uv run pytest -m integration`
 - Start the app (API + built UI at http://127.0.0.1:8000): `cd backend && uv run trade-sim serve`
-- Command-line alternatives: `cd backend && uv run trade-sim status|refresh|run`
+- Command-line alternatives: `cd backend && uv run trade-sim status|refresh|run|review`
 - Frontend: `cd frontend && npm test` (vitest), `npm run build` (the output is served by `trade-sim serve`), `npm run dev` (Vite on :5173, proxies /api to :8000)
 - Model prices shown in Settings: `backend/model_catalogue.json` (update `as_of` when prices change)
 - Agent prompts live in `backend/prompts/*.md` (D25); optional MCP servers in `backend/mcp_servers.json` (D27).

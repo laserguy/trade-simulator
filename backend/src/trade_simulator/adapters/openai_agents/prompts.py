@@ -11,6 +11,8 @@ from trade_simulator.core.decision_log import MAX_WATCHLIST_SIZE
 from trade_simulator.core.errors import ConfigError
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.run_budget import DECISION_RUN_LIMITS, REFRESH_RUN_LIMITS
+from trade_simulator.core.strategy import SECTION_WORD_LIMIT
+from trade_simulator.core.strategy_review import STRATEGY_REVIEW_MINIMUMS
 from trade_simulator.core.trading_rules import TradingRules
 
 
@@ -42,4 +44,7 @@ def _values(profile: ExchangeProfile) -> dict[str, str]:
         "decision_max_searches": str(DECISION_RUN_LIMITS.max_searches),
         "refresh_max_searches": str(REFRESH_RUN_LIMITS.max_searches),
         "watchlist_max": str(MAX_WATCHLIST_SIZE),
+        "section_word_limit": str(SECTION_WORD_LIMIT),
+        "review_min_days": str(STRATEGY_REVIEW_MINIMUMS.trading_days),
+        "review_min_runs": str(STRATEGY_REVIEW_MINIMUMS.trading_runs),
     }
