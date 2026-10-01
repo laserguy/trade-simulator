@@ -482,6 +482,14 @@
   - **One catch-up:** matches how the scheduler already handles a missed run.
 - **Alternatives considered:** Research during reviews (costs searches, off the point); reviews only while the market is closed (blocks the button for no gain); automatic retries (cost, and the same failure again); skipping a missed review until next week (the strategy goes unreviewed past its period).
 
+**Update (2026-10-01): details fixed while building the scorecard and timing**
+- **Choice:** The weekly slot is the week's last close plus 15 minutes; every sell counts as a closed trade; value points (D33) also record the cash held.
+- **Why:**
+  - **Last close + 15 minutes:** "Friday after the close" needs an exact time. The delay lets the day's closing value be recorded first, so the scorecard includes the day; using the week's last close handles Friday holidays.
+  - **Every sell:** each sell locks in a gain or loss, including "take half off"; counting only full exits would hide them.
+  - **Cash on value points:** average cash needs the cash held over time, which wasn't recorded. Older points have none; if none in the period, today's share is used.
+- **Alternatives considered:** Exactly at the close (the closing value might not be recorded yet); only full exits as closed trades (hides partial sells); rebuilding cash from the trade history (more code for the same number).
+
 **Update (2026-10-01): "targets" instead of "prediction"**
 - **Choice:** Section 5 is renamed *My targets for this period* (was *How I'll know it's working*); the review's verdict on it is **met / partly met / missed** (was came true / partly / didn't).
 - **Why:** The user asked what "prediction came true" meant; "targets" says the same thing more plainly. The targets are still set before the results exist, so the strategy is judged against what it promised. The verdict is the agent's judgement against the code's scorecard, not a code check (the targets are plain words); the user sees both in the history.

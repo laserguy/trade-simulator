@@ -1,10 +1,13 @@
 """In-memory stand-ins for the ports, so use cases can be tested without AI, network, or clock (D18)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from trade_simulator.application.ports import AgentDecision, AgentUsage, WatchlistProposal
 from trade_simulator.core.errors import MarketDataError
+
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 class FakeMarketData:
@@ -33,6 +36,28 @@ class FakeCalendar:
 
     def next_close(self, moment):
         return moment + timedelta(hours=6)
+
+
+class WeekdayCalendar:
+    """Sessions Monday to Friday closing at 16:00 New York time, minus the given holidays."""
+
+    def __init__(self, holidays=()):
+        self.holidays = set(holidays)
+
+    def is_open(self, moment):
+        return False
+
+    def next_open(self, moment):
+        raise NotImplementedError
+
+    def next_close(self, moment):
+        local = moment.astimezone(NEW_YORK)
+        day = local.date()
+        while True:
+            close = datetime.combine(day, time(16), NEW_YORK)
+            if day.weekday() < 5 and day not in self.holidays and close > local:
+                return close
+            day += timedelta(days=1)
 
 
 class FakeAgent:

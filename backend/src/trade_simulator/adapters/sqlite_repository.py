@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS value_snapshots (
     at TEXT PRIMARY KEY,
     total_value TEXT NOT NULL,
-    benchmark_price TEXT NOT NULL
+    benchmark_price TEXT NOT NULL,
+    cash TEXT
 );
 CREATE TABLE IF NOT EXISTS price_history (
     exchange TEXT NOT NULL,
@@ -179,6 +180,7 @@ _ADDED_COLUMNS = {
     "runs": {"model": "TEXT", "strategy_version": "INTEGER"},
     "findings": {"price": "TEXT", "change_percent": "TEXT"},
     "order_results": {"strategy_section": "TEXT"},
+    "value_snapshots": {"cash": "TEXT"},
 }
 
 
@@ -213,14 +215,19 @@ class SqliteRepository:
     def save_value_snapshot(self, snapshot: ValueSnapshot) -> None:
         with self._transaction() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO value_snapshots (at, total_value, benchmark_price) VALUES (?, ?, ?)",
-                (_to_iso(snapshot.at), str(snapshot.total_value), str(snapshot.benchmark_price)),
+                "INSERT OR REPLACE INTO value_snapshots (at, total_value, benchmark_price, cash) VALUES (?, ?, ?, ?)",
+                (_to_iso(snapshot.at), str(snapshot.total_value), str(snapshot.benchmark_price),
+                 _decimal_text(snapshot.cash)),
             )
 
     def load_value_snapshots(self) -> list[ValueSnapshot]:
         with self._transaction() as conn:
-            rows = conn.execute("SELECT at, total_value, benchmark_price FROM value_snapshots ORDER BY at").fetchall()
-        return [ValueSnapshot(_from_iso(r["at"]), Decimal(r["total_value"]), Decimal(r["benchmark_price"])) for r in rows]
+            rows = conn.execute("SELECT at, total_value, benchmark_price, cash FROM value_snapshots ORDER BY at").fetchall()
+        return [
+            ValueSnapshot(_from_iso(r["at"]), Decimal(r["total_value"]), Decimal(r["benchmark_price"]),
+                          _decimal_or_none(r["cash"]))
+            for r in rows
+        ]
 
     # --- price history (D36) ---
 
@@ -365,6 +372,13 @@ class SqliteRepository:
         with self._transaction() as conn:
             row = conn.execute("SELECT * FROM strategy_versions WHERE ended_at IS NULL").fetchone()
         return _read_strategy_version(row) if row else None
+
+    def runs_following(self, version: int) -> list[DecisionRun]:
+        with self._transaction() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE strategy_version = ? ORDER BY started_at", (version,)
+            ).fetchall()
+            return [_read_run(conn, row) for row in rows]
 
     def strategy_versions(self) -> list[StrategyVersion]:
         with self._transaction() as conn:

@@ -32,7 +32,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D40 market context in research | `adapters/finnhub_market_data.py` (`market_news`), `toolbox.py` and `agent_factory.py` (`get_market_news` tool), `application/ports.py` (`MarketOverview`, `Repository.latest_market_overview`), `application/run_decision.py`, `inputs.py`, `backend/prompts/*.md` |
 | D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
 | D42 agent's memory of its trades | `application/trade_memory.py` (buys behind each holding, performance line), `application/run_decision.py` (puts them in `DecisionContext`), `inputs.py` (writes them into the agent's starting text, and builds the holdings note), `agent_factory.py` (adds the note to every research request), `adapters/sqlite_repository.py` (`executed_trades`, with reasons) |
-| D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`) |
+| D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `application/strategy_scorecard.py` (a version's results, computed by code), `application/strategy_timing.py` (minimums, when a review may run, the weekly slot and catch-up), `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`, `runs_following`) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |
@@ -75,7 +75,7 @@ Money is stored as exact decimal text. New columns on existing tables go in `_AD
 | `watchlist_meta`, `watchlist_entries` | The current watchlist with a reason and sources per stock |
 | `settings` | Key/value: `openai_api_key`, `anthropic_api_key`, `model_id`, `run_mode` |
 | `benchmark_start` | SPY price when tracking began (D23) |
-| `value_snapshots` | Portfolio value and SPY price over time (D33) |
+| `value_snapshots` | Portfolio value and SPY price over time (D33), and the cash held then (for the strategy scorecard, D43; empty on older points) |
 | `price_history`, `price_history_sync` | Cached daily bars and when each stock was last fetched (D36) |
 
 ## API endpoints (`adapters/web/api.py`, localhost only)

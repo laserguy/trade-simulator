@@ -42,6 +42,15 @@ def test_records_value_and_benchmark_as_comparable_dollar_lines(repo):
     assert points[1].at == NOW + timedelta(days=1)
 
 
+def test_each_point_keeps_the_cash_held_then(repo):
+    repo.save_portfolio(Portfolio(Decimal("9000"), {"AAPL": Position("AAPL", 10, Decimal("100"))}))
+
+    make(repo, FakeMarketData({"SPY": "500", "AAPL": "100"}), FixedClock(NOW)).record()
+
+    [snapshot] = repo.load_value_snapshots()
+    assert snapshot.cash == Decimal("9000")
+
+
 def test_nothing_is_recorded_when_prices_are_unavailable(repo):
     history = make(repo, FakeMarketData(error=MARKET_DOWN), FixedClock(NOW))
 

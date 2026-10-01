@@ -63,6 +63,10 @@ class Repository(Protocol):
 
     def current_strategy(self) -> StrategyVersion | None: ...
 
+    def runs_following(self, version: int) -> list[DecisionRun]:
+        """The runs that followed a strategy version, oldest first."""
+        ...
+
     def strategy_versions(self) -> list[StrategyVersion]:
         """Every version, oldest first."""
         ...
@@ -196,6 +200,7 @@ class ValueSnapshot:
     at: datetime
     total_value: Decimal
     benchmark_price: Decimal
+    cash: Decimal | None = None  # for the strategy scorecard's average cash (D43); None on older points
 
 
 @dataclass(frozen=True)

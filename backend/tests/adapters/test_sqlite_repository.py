@@ -456,6 +456,27 @@ def test_runs_from_before_strategies_have_no_version(repo):
     assert {r.order.follows for r in saved.order_results} == {None}
 
 
+def test_runs_following_a_strategy_version_come_oldest_first(repo):
+    def run(run_id, minutes, version):
+        return DecisionRun(**{**make_run(run_id, START + timedelta(minutes=minutes)).__dict__, "strategy_version": version})
+
+    repo.save_run(run("b", 30, 2), None)
+    repo.save_run(run("a", 15, 2), None)
+    repo.save_run(run("other", 0, 1), None)
+    repo.save_run(make_run("before-strategies", START), None)
+
+    assert [r.id for r in repo.runs_following(2)] == ["a", "b"]
+
+
+def test_value_snapshots_keep_cash_when_given(repo):
+    from trade_simulator.application.ports import ValueSnapshot
+
+    repo.save_value_snapshot(ValueSnapshot(START, Decimal("10000"), Decimal("500"), cash=Decimal("4000.50")))
+    repo.save_value_snapshot(ValueSnapshot(START + timedelta(hours=1), Decimal("10000"), Decimal("500")))
+
+    assert [s.cash for s in repo.load_value_snapshots()] == [Decimal("4000.50"), None]
+
+
 def test_older_database_gains_the_strategy_columns(tmp_path):
     import sqlite3
 

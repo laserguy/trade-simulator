@@ -10,6 +10,17 @@ from trade_simulator.core.decision_log import RunCost, RunStatus
 from trade_simulator.core.strategy import StrategySection
 
 
+@dataclass(frozen=True)
+class ReviewMinimums:
+    """How long a version must run before it may be reviewed (D43)."""
+
+    trading_days: int
+    trading_runs: int
+
+
+STRATEGY_REVIEW_MINIMUMS = ReviewMinimums(trading_days=10, trading_runs=5)
+
+
 class ReviewTrigger(Enum):
     BUTTON = "button"
     SCHEDULED = "scheduled"

@@ -43,7 +43,9 @@ class ValueHistory:
         if snapshot.total_value is None or snapshot.benchmark_price is None:
             logger.info("Value history point skipped: prices unavailable")
             return
-        self._repository.save_value_snapshot(ValueSnapshot(self._clock(), snapshot.total_value, snapshot.benchmark_price))
+        self._repository.save_value_snapshot(
+            ValueSnapshot(self._clock(), snapshot.total_value, snapshot.benchmark_price, snapshot.cash)
+        )
 
     def points(self) -> list[ValuePoint]:
         start = self._repository.load_benchmark_start()
