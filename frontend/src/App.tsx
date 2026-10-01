@@ -8,6 +8,7 @@ import {
   type Run,
   type Settings,
   type Status,
+  type StrategyPage,
   type ValueHistory,
   type Watchlist,
 } from './api'
@@ -15,15 +16,17 @@ import { Home } from './components/Home'
 import { LiveRun } from './components/LiveRun'
 import { RunLog } from './components/RunLog'
 import { SettingsView } from './components/SettingsView'
+import { StrategyView } from './components/StrategyView'
 import { WatchlistView } from './components/WatchlistView'
 import { formatExchangeTime } from './format'
 
-// Screens: Home, Decision log, Watchlist as tabs (D32); Settings as its own page behind the gear icon (D29).
-type Page = 'home' | 'log' | 'watchlist' | 'settings'
+// Screens: Home, Decision log, Watchlist, Strategy as tabs (D32, D44); Settings as its own page behind the gear icon (D29).
+type Page = 'home' | 'log' | 'watchlist' | 'strategy' | 'settings'
 const TABS: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'log', label: 'Decision log' },
   { id: 'watchlist', label: 'Watchlist' },
+  { id: 'strategy', label: 'Strategy' },
 ]
 
 export default function App() {
@@ -35,6 +38,7 @@ export default function App() {
   const [watchlist, setWatchlist] = useState<Watchlist | null>(null)
   const [runs, setRuns] = useState<Run[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [strategy, setStrategy] = useState<StrategyPage | null>(null)
   const [activity, setActivity] = useState<Activity | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
@@ -44,18 +48,20 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [p, h, w, r, s] = await Promise.all([
+      const [p, h, w, r, s, st] = await Promise.all([
         api.portfolio(),
         api.history(),
         api.watchlist(),
         api.runs(),
         api.settings(),
+        api.strategy(),
       ])
       setPortfolio(p)
       setHistory(h)
       setWatchlist(w)
       setRuns(r)
       setSettings(s)
+      setStrategy(st)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not reach the backend')
     }
@@ -226,6 +232,15 @@ export default function App() {
             </>
           )}
           {page === 'watchlist' && <WatchlistView watchlist={watchlist} currency={currency} />}
+          {page === 'strategy' && (
+            <StrategyView
+              page={strategy}
+              currency={currency}
+              timezone={status?.timezone ?? 'America/New_York'}
+              disabled={running || noModel}
+              onReview={() => start(api.reviewStrategy)}
+            />
+          )}
         </>
       )}
     </div>

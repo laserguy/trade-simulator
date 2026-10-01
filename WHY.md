@@ -546,6 +546,11 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
   - Hover keeps the chip short. Trade-off accepted: no explanation on a touch screen.
 - **Alternatives considered:** Highlighting words inside the findings (busy, and the app would have to guess which words matter); writing "today" on every chip (repeats on every line).
 
+**Update (2026-10-02): strategy version and section tags (D43)**
+- **Choice:** Each trading run's header shows its strategy version, linking to the Strategy tab; each order shows the section it followed (grey) or "Deviation" (amber). Copy includes both.
+- **Why:** The user asked whether, weeks later, they could see which strategy a run followed. The version is already stored on each run. The section tags show at a glance whether each order followed the strategy, which is what the review's "was it followed?" verdict judges, so the user can check it.
+- **Alternatives considered:** No version on runs (the user would work it out from dates); sections only on the Strategy tab (the order and its basis would be in two places).
+
 ### D32: Home screen built around the agent, with a value chart
 - **Choice:** Home shows the three key numbers, a value chart against the S&P 500, the agent's latest decision in its own words, and compact holdings.
 - **Why:**
@@ -631,6 +636,11 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
   - **Tagged changes** with a line on why keep versions comparable at a glance.
   - **History rows** follow the Decision log pattern the user already knows (D31), with room for the reasons.
 - **Alternatives considered:** No progress bars (the user would work out the minimums); history as a table (too little room for reasons).
+
+**Update (2026-10-02): reviews stay off the Decision log**
+- **Choice:** Strategy reviews are not Decision log rows; a review in progress still shows its live timeline there (D28). A run's version tag opens this tab at that version.
+- **Why:** The Decision log stays about trading, and the review history already has a full home here. The version tag on each run answers "which strategy was this run following?" weeks later (the user's question).
+- **Alternatives considered:** Reviews as Decision log rows (the same history in two places).
 
 ---
 

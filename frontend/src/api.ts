@@ -156,6 +156,68 @@ export interface TradingRules {
   max_position_percent: string
 }
 
+// The Strategy tab (D43, D44).
+export interface StrategySection {
+  key: string
+  title: string
+  text: string
+  changed: boolean // differs from the previous version
+  changed_why: string
+}
+
+export interface StrategyTiming {
+  first: boolean
+  can_review: boolean
+  trading_days: number
+  trading_runs: number
+  min_trading_days: number
+  min_trading_runs: number
+  days_met_at: string | null
+  next_scheduled: string | null
+}
+
+export interface Scorecard {
+  period_start: string
+  period_end: string
+  portfolio_percent: string
+  benchmark_percent: string
+  trading_runs: number
+  trades: number
+  fees: string
+  closed_trades: { symbol: string; gain: string }[]
+  holdings: { symbol: string; gain_percent: string }[]
+  average_cash_percent: string
+  followed_orders: number
+  deviations: number
+}
+
+export interface StrategyReviewEntry {
+  id: string
+  trigger: 'button' | 'scheduled' | 'automatic'
+  started_at: string
+  status: 'completed' | 'failed'
+  failure_reason: string | null
+  decision: 'first' | 'keep' | 'change' | null
+  reviewed_version: number | null
+  written_version: number | null
+  reason: string
+  targets_verdict: 'met' | 'partly_met' | 'missed' | null
+  targets_note: string
+  followed: 'yes' | 'partly' | 'no' | null
+  followed_note: string
+  changes: { key: string; title: string; old: string; new: string; why: string }[]
+  scorecard: Scorecard | null
+  cost: Run['cost']
+  trace_url: string | null
+}
+
+export interface StrategyPage {
+  current: { number: number; started_at: string; sections: StrategySection[] } | null
+  timing: StrategyTiming
+  scorecard: Scorecard | null
+  reviews: StrategyReviewEntry[]
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly body: Record<string, unknown>
@@ -188,6 +250,8 @@ export const api = {
     request<PriceHistory>(`/api/price-history/${encodeURIComponent(symbol)}?period=${period}`),
   runNow: () => request<{ status: string }>('/api/runs', { method: 'POST' }),
   refreshWatchlist: () => request<{ status: string }>('/api/watchlist/refresh', { method: 'POST' }),
+  strategy: () => request<StrategyPage>('/api/strategy'),
+  reviewStrategy: () => request<{ status: string }>('/api/strategy/review', { method: 'POST' }),
   settings: () => request<Settings>('/api/settings'),
   saveKey: (provider: string, apiKey: string | null) =>
     request<Settings>(`/api/settings/keys/${provider}`, {

@@ -33,6 +33,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D41 trading goal | `backend/prompts/trading_agent.md` (Goal section) |
 | D42 agent's memory of its trades | `application/trade_memory.py` (buys behind each holding, performance line), `application/run_decision.py` (puts them in `DecisionContext`), `inputs.py` (writes them into the agent's starting text, and builds the holdings note), `agent_factory.py` (adds the note to every research request), `adapters/sqlite_repository.py` (`executed_trades`, with reasons) |
 | D43 agent-written strategy (being built) | `core/strategy.py` (the five sections, versions, `DEVIATION`), `core/strategy_review.py` (review, verdicts, scorecard), `core/order.py` (`follows`: the section an order follows), `application/strategy_scorecard.py` (a version's results, computed by code), `application/strategy_timing.py` (minimums, when a review may run, the weekly slot and catch-up), `application/review_strategy.py` (the review use case: context, code check of the answer, all-or-nothing save, failed reviews logged), `adapters/openai_agents/review_input.py` (the review's starting text: scorecard, orders, version history), `schemas.py` (`StrategyReviewResult`), `agent_factory.py` (`strategy_reviewer`: the Trading Agent with no tools), `trading_agents.py` (`review_strategy`), `backend/prompts/strategy_review.md`, `adapters/sqlite_repository.py` (`strategy_versions`, `strategy_reviews`, `runs_following`), `cli.py` (`trade-sim review`) |
+| D44 Strategy tab | `application/strategy_view.py` (what the tab shows: changed sections, timing, live scorecard, reviews with old → new), `adapters/web/api.py` (`/api/strategy`), `frontend/src/components/StrategyView.tsx`, helpers `strategy.ts` (review hint, result labels, verdict colours) |
 | D13, D14 run limits | `core/run_budget.py` (`DECISION_RUN_LIMITS`, `REFRESH_RUN_LIMITS`), enforced in `adapters/openai_agents/toolbox.py` and `agent_factory.py` |
 | D15, D19 storage, all-or-nothing saves | `adapters/sqlite_repository.py` (implements `Repository` and `SettingsStore`) |
 | D19 errors, keys never logged | `core/errors.py`, `adapters/logging_setup.py` |
@@ -46,7 +47,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D3, D35 run mode, scheduler, cost estimate | `application/run_mode.py`, `schedule.py`, `scheduler.py`, `run_cost_estimate.py`, `frontend/src/components/RunModeSection.tsx` |
 | D36 price history | `application/price_history.py`, `adapters/tiingo_price_history.py` (implements `PriceHistorySource`) |
 | D30 watchlist view | `application/watchlist_view.py` (watchlist with quotes and held flag) |
-| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers on the watchlist and Home charts), `format.ts` (money, percentages, exchange times), `runSections.ts` (how an open Decision log run is grouped: orders with their research, the rest) and `runText.ts` (a run as plain text for the Decision log's Copy button) |
+| D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs, including Strategy (D44), and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers on the watchlist and Home charts), `format.ts` (money, percentages, exchange times), `runSections.ts` (how an open Decision log run is grouped: orders with their research, the rest) and `runText.ts` (a run as plain text for the Decision log's Copy button) |
 
 ## Config (`backend/.env`, see `.env.example`)
 
@@ -91,6 +92,8 @@ Money is stored as exact decimal text. New columns on existing tables go in `_AD
 | `GET /api/activity` | Live timeline of the run in progress (D28) |
 | `POST /api/runs` | Run now (409 if the market is closed or a run is in progress) |
 | `POST /api/watchlist/refresh` | Refresh the watchlist (409 if a run is in progress) |
+| `GET /api/strategy` | Strategy tab: current strategy with changed sections, review timing, the current version's scorecard so far, review history (D44) |
+| `POST /api/strategy/review` | Review strategy (409 if a run is in progress or the minimum period isn't over; adds no value point) |
 | `GET /api/settings`, `PUT /api/settings/keys/{openai\|anthropic}`, `PUT /api/settings/model`, `PUT /api/settings/run-mode` | Settings page |
 
 The frontend calls these through `frontend/src/api.ts`.

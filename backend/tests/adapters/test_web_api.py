@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import time
 
-from fakes import FakeAgent, FakeCalendar, FakeMarketData, FakeUniverse, FixedClock, decision, proposal
+from fakes import FakeAgent, FakeCalendar, FakeMarketData, FakeUniverse, FixedClock, WeekdayCalendar, decision, proposal
 from trade_simulator.adapters.sqlite_repository import SqliteRepository
 from trade_simulator.adapters.web.api import WebServices, create_app
 from trade_simulator.application.activity import ActivityFeed
@@ -49,13 +49,30 @@ from trade_simulator.core.decision_log import (
     Watchlist,
     WatchlistEntry,
 )
+from trade_simulator.application.ports import AgentUsage, ReviewProposal
+from trade_simulator.application.review_strategy import StrategyReviewRunner
+from trade_simulator.application.strategy_view import StrategyViewer
 from trade_simulator.core.exchange_profile import US_PROFILE
 from trade_simulator.core.model_pricing import ModelCatalogue, ModelOption
 from trade_simulator.core.order import Order, Side
+from trade_simulator.core.strategy import Strategy, StrategyVersion
+from trade_simulator.core.strategy_review import ReviewDecision, ReviewTrigger, StrategyReview
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
 NOW = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)
 LUNA = ModelOption("openai", "gpt-6-luna", "GPT-6 Luna", Decimal("0.10"), Decimal("0.50"))
+FIRST_STRATEGY = ReviewProposal(
+    decision=ReviewDecision.CHANGE,
+    reason="No history yet.",
+    new_strategy=Strategy("Earnings momentum.", "Start at 6%.", "Sell when the reason breaks.", "Keep 15-30% cash.", "Beat SPY."),
+    section_changes={},
+    targets_verdict=None,
+    targets_note="",
+    followed=None,
+    followed_note="",
+    usage=AgentUsage(2000, 800, 0, "gpt-6-luna"),
+    trace_id="trace_s",
+)
 CATALOGUE = ModelCatalogue(date(2026, 9, 26), (LUNA,))
 
 
@@ -65,7 +82,7 @@ def build(tmp_path, calendar_open=True):
     guard = RunGuard()
     calendar = FakeCalendar(open_=calendar_open)
     market = FakeMarketData({"SPY": "500", "AAPL": "200"})
-    agent = FakeAgent(decision(), proposal=proposal([WatchlistEntry("AAPL", "Earnings")]))
+    agent = FakeAgent(decision(), proposal=proposal([WatchlistEntry("AAPL", "Earnings")]), review=FIRST_STRATEGY)
     clock = FixedClock(NOW)
     settings = SettingsService(store=repo, catalogue=CATALOGUE, default_model_id="gpt-6-luna")
     refresher = WatchlistRefresher(
@@ -94,6 +111,13 @@ def build(tmp_path, calendar_open=True):
         price_history=PriceHistoryService(repository=repo, source=FakePriceSource(), profile=US_PROFILE, clock=clock),
         settings=settings,
         catalogue=CATALOGUE,
+        strategy_reviewer=StrategyReviewRunner(
+            repository=repo, market_data=market, calendar=WeekdayCalendar(), agent=agent, profile=US_PROFILE,
+            guard=guard, clock=clock, activity=activity,
+        ),
+        strategy_viewer=StrategyViewer(
+            repository=repo, market_data=market, calendar=WeekdayCalendar(), profile=US_PROFILE, clock=clock
+        ),
         clock=clock,
     )
     return TestClient(create_app(services)), services
@@ -327,6 +351,57 @@ def test_a_finished_run_adds_a_point_to_the_value_history(tmp_path):
             time.sleep(0.05)
 
     assert len(services.value_history.points()) == 1
+
+
+def test_strategy_page_without_a_strategy_offers_the_first_one(client):
+    body = client.get("/api/strategy").json()
+
+    assert body["current"] is None and body["scorecard"] is None and body["reviews"] == []
+    assert body["timing"]["first"] is True and body["timing"]["can_review"] is True
+    assert (body["timing"]["min_trading_days"], body["timing"]["min_trading_runs"]) == (10, 5)
+
+
+def test_review_strategy_writes_the_first_strategy_in_the_background(tmp_path):
+    client, services = build(tmp_path)
+
+    with client:
+        assert client.post("/api/strategy/review").status_code == 202
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and services.repository.current_strategy() is None:
+            time.sleep(0.05)
+
+    body = client.get("/api/strategy").json()
+    assert body["current"]["number"] == 1
+    assert body["current"]["sections"][1] == {
+        "key": "position_size", "title": "Position size", "text": "Start at 6%.", "changed": False, "changed_why": "",
+    }
+    [entry] = body["reviews"]
+    assert (entry["decision"], entry["status"], entry["written_version"]) == ("first", "completed", 1)
+    assert entry["cost"]["estimated_usd"] == "0.0006"
+    assert entry["trace_url"].endswith("trace_s")
+    assert services.value_history.points() == []  # a review is not a trade: no value point
+
+
+def test_review_strategy_is_refused_before_the_minimum_period(tmp_path):
+    client, services = build(tmp_path)
+    first = StrategyReview(
+        id="r1", trigger=ReviewTrigger.BUTTON, started_at=NOW, finished_at=NOW, status=RunStatus.COMPLETED,
+        failure_reason=None, reviewed_version=None, decision=ReviewDecision.FIRST, reason="x", cost=RunCost(0, 0, 0),
+        trace_id=None,
+    )
+    services.repository.save_strategy_review(first, StrategyVersion(1, FIRST_STRATEGY.new_strategy, NOW, None, "r1"))
+
+    response = client.post("/api/strategy/review")
+
+    assert response.status_code == 409
+    assert response.json()["detail"].startswith("Too early to review: 0 of 10 trading days")
+
+
+def test_review_strategy_is_refused_while_another_run_is_active(tmp_path):
+    client, services = build(tmp_path)
+    services.guard.try_acquire()
+
+    assert client.post("/api/strategy/review").status_code == 409
 
 
 def wait_for_watchlist(services, seconds=3.0):

@@ -25,7 +25,8 @@ from trade_simulator.application.portfolio_view import PortfolioSnapshot, Portfo
 from trade_simulator.application.price_history import PriceHistoryService
 from trade_simulator.application.ports import MarketCalendar, Repository
 from trade_simulator.application.refresh_watchlist import WatchlistRefresher
-from trade_simulator.application.review_strategy import StrategyReviewRunner
+from trade_simulator.application.review_strategy import StrategyReviewNotAllowedError, StrategyReviewRunner
+from trade_simulator.application.strategy_view import ReviewEntry, StrategyPage, StrategyViewer
 from trade_simulator.application.run_decision import DecisionRunner
 from trade_simulator.application.run_cost_estimate import estimate_modes
 from trade_simulator.application.run_guard import RunGuard
@@ -37,9 +38,10 @@ from trade_simulator.application.settings import SettingsError, SettingsService
 from trade_simulator.application.value_history import ValueHistory
 from trade_simulator.application.watchlist_view import WatchlistView, WatchlistViewer
 from trade_simulator.adapters.text_links import merge_sources, split_links
-from trade_simulator.core.decision_log import DecisionRun, Finding, RunTrigger
+from trade_simulator.core.decision_log import DecisionRun, Finding, RunCost, RunTrigger
 from trade_simulator.core.exchange_profile import ExchangeProfile
 from trade_simulator.core.model_pricing import ModelCatalogue
+from trade_simulator.core.strategy_review import ReviewTrigger, Scorecard
 from trade_simulator.core.trading_rules import TradingRules
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,7 @@ class WebServices:
     settings: SettingsService
     catalogue: ModelCatalogue
     strategy_reviewer: StrategyReviewRunner | None = None  # the Trading Agent's strategy reviews (D43)
+    strategy_viewer: StrategyViewer | None = None  # the Strategy tab (D44)
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(timezone.utc))
     scheduler_tick_seconds: float = 10.0
 
@@ -87,10 +90,10 @@ class RunModeBody(BaseModel):
 def create_app(services: WebServices, frontend_dist: Path | None = None) -> FastAPI:
     background: set[asyncio.Task] = set()
 
-    def start_in_background(work: Callable) -> None:
+    def start_in_background(work: Callable, record_value: bool = True) -> None:
         async def work_then_record():
             run = await work()
-            if run is not None:
+            if run is not None and record_value:
                 # A point on the value chart after every run (D33).
                 await asyncio.to_thread(services.value_history.record)
                 warm_watchlist_prices()  # a refresh may have added new stocks
@@ -275,6 +278,22 @@ def create_app(services: WebServices, frontend_dist: Path | None = None) -> Fast
         start_in_background(services.watchlist_refresher.refresh)
         return {"status": "started"}
 
+    @app.get("/api/strategy")
+    async def strategy() -> dict:
+        page = await asyncio.to_thread(services.strategy_viewer.view)
+        return _strategy_json(page, services.catalogue)
+
+    @app.post("/api/strategy/review", status_code=202)
+    async def review_strategy():
+        if services.guard.busy:
+            return JSONResponse(status_code=409, content={"detail": "Another run is still in progress"})
+        timing = services.strategy_reviewer.timing()
+        if not timing.can_review:
+            return JSONResponse(status_code=409, content={"detail": str(StrategyReviewNotAllowedError(timing))})
+        # A review is not a trade, so it adds no value point (D33).
+        start_in_background(lambda: services.strategy_reviewer.review(ReviewTrigger.BUTTON), record_value=False)
+        return {"status": "started"}
+
     @app.get("/api/settings")
     def get_settings() -> dict:
         return _settings_json(services, schedule)
@@ -368,8 +387,6 @@ def _watchlist_json(view: WatchlistView, trends: dict[str, list[Decimal]], chart
 
 
 def _run_json(run: DecisionRun, catalogue: ModelCatalogue) -> dict:
-    option = catalogue.find(run.cost.model) if run.cost.model else None
-    estimate = option.estimate_cost(run.cost.input_tokens, run.cost.output_tokens) if option else None
     return {
         "id": run.id,
         "trigger": run.trigger.value,
@@ -391,14 +408,93 @@ def _run_json(run: DecisionRun, catalogue: ModelCatalogue) -> dict:
             }
             for r in run.order_results
         ],
-        "cost": {
-            "input_tokens": run.cost.input_tokens,
-            "output_tokens": run.cost.output_tokens,
-            "searches": run.cost.searches,
-            "model": run.cost.model,
-            "estimated_usd": None if estimate is None else str(estimate.quantize(Decimal("0.0001"))),
-        },
+        "cost": _cost_json(run.cost, catalogue),
         "trace_url": TRACE_URL.format(run.trace_id) if run.trace_id else None,
+    }
+
+
+def _cost_json(cost: RunCost, catalogue: ModelCatalogue) -> dict:
+    option = catalogue.find(cost.model) if cost.model else None
+    estimate = option.estimate_cost(cost.input_tokens, cost.output_tokens) if option else None
+    return {
+        "input_tokens": cost.input_tokens,
+        "output_tokens": cost.output_tokens,
+        "searches": cost.searches,
+        "model": cost.model,
+        "estimated_usd": None if estimate is None else str(estimate.quantize(Decimal("0.0001"))),
+    }
+
+
+def _strategy_json(page: StrategyPage, catalogue: ModelCatalogue) -> dict:
+    """The Strategy tab (D44)."""
+    timing, current = page.timing, page.current
+    return {
+        "current": None if current is None else {
+            "number": current.number,
+            "started_at": current.started_at.isoformat(),
+            "sections": [
+                {"key": s.section.value, "title": s.section.title, "text": s.text, "changed": s.changed,
+                 "changed_why": s.changed_why}
+                for s in page.sections
+            ],
+        },
+        "timing": {
+            "first": timing.first,
+            "can_review": timing.can_review,
+            "trading_days": timing.trading_days,
+            "trading_runs": timing.trading_runs,
+            "min_trading_days": timing.minimums.trading_days,
+            "min_trading_runs": timing.minimums.trading_runs,
+            "days_met_at": timing.days_met_at.isoformat() if timing.days_met_at else None,
+            "next_scheduled": timing.next_scheduled.isoformat() if timing.next_scheduled else None,
+        },
+        "scorecard": _scorecard_json(page.scorecard),
+        "reviews": [_review_json(entry, catalogue) for entry in page.reviews],
+    }
+
+
+def _scorecard_json(card: Scorecard | None) -> dict | None:
+    if card is None:
+        return None
+    return {
+        "period_start": card.period_start.isoformat(),
+        "period_end": card.period_end.isoformat(),
+        "portfolio_percent": _money(card.portfolio_percent),
+        "benchmark_percent": _money(card.benchmark_percent),
+        "trading_runs": card.trading_runs,
+        "trades": card.trades,
+        "fees": _money(card.fees),
+        "closed_trades": [{"symbol": t.symbol, "gain": _money(t.gain)} for t in card.closed_trades],
+        "holdings": [{"symbol": h.symbol, "gain_percent": _money(h.gain_percent)} for h in card.holdings],
+        "average_cash_percent": _money(card.average_cash_percent),
+        "followed_orders": card.followed_orders,
+        "deviations": card.deviations,
+    }
+
+
+def _review_json(entry: ReviewEntry, catalogue: ModelCatalogue) -> dict:
+    review = entry.review
+    return {
+        "id": review.id,
+        "trigger": review.trigger.value,
+        "started_at": review.started_at.isoformat(),
+        "status": review.status.value,
+        "failure_reason": review.failure_reason,
+        "decision": review.decision.value if review.decision else None,
+        "reviewed_version": entry.reviewed_version,
+        "written_version": entry.written_version,
+        "reason": review.reason,
+        "targets_verdict": review.targets_verdict.value if review.targets_verdict else None,
+        "targets_note": review.targets_note,
+        "followed": review.followed.value if review.followed else None,
+        "followed_note": review.followed_note,
+        "changes": [
+            {"key": c.section.value, "title": c.section.title, "old": c.old, "new": c.new, "why": c.why}
+            for c in entry.changes
+        ],
+        "scorecard": _scorecard_json(review.scorecard),
+        "cost": _cost_json(review.cost, catalogue),
+        "trace_url": TRACE_URL.format(review.trace_id) if review.trace_id else None,
     }
 
 
