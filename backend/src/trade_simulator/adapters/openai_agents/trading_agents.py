@@ -149,5 +149,4 @@ class OpenAITradingAgents:
                 trace_id=trace_id if tracing_on else None,
                 usage=state.usage(),
             ) from exc
-        state.add_usage(result.context_wrapper.usage)
         return result.final_output, (trace_id if tracing_on else None)

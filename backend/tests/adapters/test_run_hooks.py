@@ -25,6 +25,18 @@ def test_research_agent_reports_do_not_count_as_tool_sources():
     assert state.tool_urls == set()
 
 
+def test_each_model_call_adds_its_tokens_to_the_run_as_it_returns():
+    # counted per call, so a run that fails later still records what it spent
+    state = AgentRunState(budget=RunBudget(DECISION_RUN_LIMITS))
+    hooks, ctx = AgentRunHooks(), SimpleNamespace(context=state)
+
+    for tokens_in, tokens_out in [(100, 10), (250, 30)]:
+        response = SimpleNamespace(usage=SimpleNamespace(input_tokens=tokens_in, output_tokens=tokens_out))
+        asyncio.run(hooks.on_llm_end(ctx, None, response))
+
+    assert (state.input_tokens, state.output_tokens) == (350, 40)
+
+
 def test_timeline_hooks_still_receive_every_step():
     calls = []
 

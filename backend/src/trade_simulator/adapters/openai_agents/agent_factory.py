@@ -153,7 +153,6 @@ def _ask_research_agent_tool(research: Agent):
             hooks=state.hooks,
             max_turns=RESEARCH_MAX_TURNS,
         )
-        state.add_usage(result.context_wrapper.usage)
         report: ResearchReport = result.final_output
         state.findings.extend(to_findings(report.findings, state.tool_urls, state.quotes))
         return report.model_dump_json()

@@ -22,7 +22,7 @@ class AgentRunState:
     output_tokens: int = 0
 
     def add_usage(self, usage) -> None:
-        """Add an SDK Usage. Nested agent runs report usage separately, so every run's usage is added here."""
+        """Add an SDK Usage. Called after every model call (run_hooks.py), nested Research Agent runs included."""
         self.input_tokens += usage.input_tokens
         self.output_tokens += usage.output_tokens
 

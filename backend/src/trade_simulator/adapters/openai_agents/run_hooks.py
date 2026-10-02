@@ -1,4 +1,5 @@
-"""SDK run hooks for every agent run: remember the links tools return (D22) and feed the live timeline (D28).
+"""SDK run hooks for every agent run: remember the links tools return (D22), add up each model call's
+tokens, and feed the live timeline (D28).
 
 Links are collected from every tool, including MCP tools (D27), so a source can be checked against what a
 tool really returned. The Research Agent's report is skipped: its links were written by the agent.
@@ -28,6 +29,10 @@ class AgentRunHooks(RunHooks):
             context.context.tool_urls |= find_urls(str(result))
         if self._timeline:
             await self._timeline.on_tool_end(context, agent, tool, result)
+
+    async def on_llm_end(self, context, agent, response) -> None:
+        # counted per model call, so a run that fails partway still records what it spent (D22)
+        context.context.add_usage(response.usage)
 
     async def on_agent_end(self, context, agent, output) -> None:
         if self._timeline:
