@@ -15,7 +15,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | Adapters | `adapters/` | `application`, `core`, third-party libraries | SQLite, Finnhub, Tavily, Tiingo, exchange calendar, OpenAI Agents SDK, FastAPI, config, logging |
 
 - **Wiring:** `adapters/bootstrap.py` is the only place that knows every concrete adapter. It builds the services from config.
-- **Entry points:** `cli.py` (`trade-sim serve|status|refresh|run|review`) and `adapters/web/api.py` (`create_app`).
+- **Entry points:** `cli.py` (`trade-sim serve|status|refresh|run|review|agent-map`) and `adapters/web/api.py` (`create_app`).
 - **Startup (`api.py` lifespan):** it builds the first watchlist if needed (D4), fills the price cache in the background (D36), and starts the scheduler loop (D3, D33). The loop checks every 10 seconds.
 
 ## Where each decision lives
@@ -45,6 +45,7 @@ Everything is under `backend/src/trade_simulator/`. Dependencies point inward on
 | D27 MCP servers | `adapters/openai_agents/mcp_config.py`, `backend/mcp_servers.example.json` |
 | D28 live timeline | `application/activity.py`, `adapters/openai_agents/timeline_hooks.py`, `activity_text.py`, `frontend/src/components/LiveRun.tsx` |
 | D3, D35 run mode, scheduler, cost estimate | `application/run_mode.py`, `schedule.py`, `scheduler.py`, `run_cost_estimate.py`, `frontend/src/components/RunModeSection.tsx` |
+| D45 agent map (for people only; not a source for decisions) | `docs/agent-map.html` (the page; each number in a `data-from` element; the covered agents, tools, triggers and order rules in a comment at the top), `adapters/agent_map.py` (reads the numbers from the code and fills them in), `cli.py` (`trade-sim agent-map`), `tests/test_docs_in_sync.py` (numbers and coverage checks), `.claude/hooks/check-docs.sh` (runs it after every turn) |
 | D36 price history | `application/price_history.py`, `adapters/tiingo_price_history.py` (implements `PriceHistorySource`) |
 | D30 watchlist view | `application/watchlist_view.py` (watchlist with quotes and held flag) |
 | D29–D32, D37 screens | `frontend/src/main.tsx` (entry), `App.tsx` (tabs, including Strategy (D44), and gear icon), `components/Home.tsx`, `RunLog.tsx`, `WatchlistView.tsx`, `PriceChart.tsx`, `SettingsView.tsx`; helpers `chart.ts` (chart points, trade markers on the watchlist and Home charts), `format.ts` (money, percentages, exchange times), `runSections.ts` (how an open Decision log run is grouped: orders with their research, the rest) and `runText.ts` (a run as plain text for the Decision log's Copy button); `RunLog.tsx` also shows each run's strategy version and each order's section (D31, D43) |

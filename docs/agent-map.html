@@ -1,0 +1,593 @@
+<!-- For people only (D45). Not a source of truth: do not use this file for decisions or code changes.
+     Read the code, PROBLEM_STATEMENT.md, WHY.md and ARCHITECTURE.md instead.
+     Numbers in data-from elements are filled from the code by `uv run trade-sim agent-map`; don't edit them by hand. -->
+<!-- agent-map covers
+agents: Trading Agent; Trading Agent (strategy review); Research Agent; Research Agent (watchlist refresh)
+tools: ask_research_agent; get_quotes; get_company_news; get_market_news; get_key_metrics; web_search
+run triggers: manual; daily; every_15_min; refresh
+review triggers: button; scheduled; automatic
+order rules: NOT_ON_WATCHLIST; MISSING_PRICE; INSUFFICIENT_CASH; INSUFFICIENT_SHARES; EXCEEDS_POSITION_CAP
+-->
+<title>Trade Simulator Agent Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column; three sections (the loop, the agents, over time). Orange = the AI decides, teal = the app's code. */
+:root {
+  --bg: #F3F5F3; --surface: #FFFFFF; --ink: #1A2120; --muted: #5A6664; --line: #D3DAD7;
+  --ai: #B4531A; --ai-soft: #FBEADF; --code: #1D6A6D; --code-soft: #DDEFEF; --warn: #9A3B2E;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111615; --surface: #192020; --ink: #E4EAE8; --muted: #98A5A2; --line: #2D3836;
+  --ai: #F2995C; --ai-soft: #3A2518; --code: #5DBCBF; --code-soft: #163133; --warn: #F08A7A; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111615; --surface: #192020; --ink: #E4EAE8; --muted: #98A5A2; --line: #2D3836;
+  --ai: #F2995C; --ai-soft: #3A2518; --code: #5DBCBF; --code-soft: #163133; --warn: #F08A7A; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 44px); letter-spacing: -0.01em; }
+h2 { font-size: clamp(22px, 3.2vw, 28px); }
+h3 { font-size: 19px; }
+p { margin: 0; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 20px; }
+.lede { color: var(--muted); font-size: 16px; }
+header { display: grid; gap: 14px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 2px solid; }
+.sw.ai { border-color: var(--ai); background: var(--ai-soft); }
+.sw.code { border-color: var(--code); background: var(--code-soft); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; }
+figure { margin: 0; display: grid; gap: 10px; }
+figcaption { color: var(--muted); font-size: 13.5px; }
+.scroll { overflow-x: auto; }
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font-family: var(--body); fill: currentColor; }
+svg .mono { font-family: var(--mono); }
+svg .ai-box { fill: var(--ai-soft); stroke: var(--ai); }
+svg .code-box { fill: var(--code-soft); stroke: var(--code); }
+svg .plain-box { fill: var(--surface); stroke: var(--line); }
+svg .ai-t { fill: var(--ai); }
+svg .code-t { fill: var(--code); }
+svg .muted-t { fill: var(--muted); }
+svg .warn-t { fill: var(--warn); }
+svg .edge { stroke: currentColor; fill: none; stroke-width: 1.5; }
+svg .edge.dash { stroke-dasharray: 5 4; }
+
+/* Term hints */
+.term { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: help;
+  border-bottom: 1.5px dotted var(--muted); }
+.term:focus-visible, button:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; border-radius: 2px; }
+#tip { position: fixed; z-index: 10; max-width: min(320px, calc(100vw - 32px)); background: var(--ink); color: var(--bg);
+  font-size: 13.5px; line-height: 1.45; padding: 10px 12px; border-radius: 8px; pointer-events: none; }
+
+/* Cast */
+.cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.cast-card { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--ai); border-radius: 8px; padding: 16px 18px; display: grid; gap: 8px; }
+.cast-card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+
+/* Turn facts */
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.fact { border-top: 2px solid var(--line); padding-top: 10px; display: grid; gap: 4px; }
+.fact b { font: 500 26px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.fact span { color: var(--muted); font-size: 13.5px; }
+
+/* Stepper */
+.stepper { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; }
+@media (max-width: 760px) { .stepper { grid-template-columns: minmax(0, 1fr); } }
+.step-side { display: grid; gap: 14px; align-content: start; }
+.who { display: inline-flex; align-items: center; gap: 8px; font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 6px 9px; border-radius: 5px; justify-self: start; }
+.who.ai { color: var(--ai); background: var(--ai-soft); }
+.who.code { color: var(--code); background: var(--code-soft); }
+.step-title { font: 600 20px/1.25 var(--display); }
+.step-detail { color: var(--muted); }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controls button { min-width: 7.5em; font: 500 14px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+.controls button:hover:not(:disabled) { border-color: var(--ink); }
+.controls button:disabled { opacity: .4; cursor: default; }
+.count { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 4px; flex-wrap: wrap; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dots i.ai { background: color-mix(in srgb, var(--ai) 35%, var(--line)); }
+.dots i.code { background: color-mix(in srgb, var(--code) 35%, var(--line)); }
+.dots i.on { outline: 2px solid var(--ink); outline-offset: 1px; }
+.dots i.ai.on, .dots i.ai.done { background: var(--ai); }
+.dots i.code.on, .dots i.code.done { background: var(--code); }
+
+.convos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 460px) { .convos { grid-template-columns: minmax(0, 1fr); } }
+.convo { display: grid; gap: 8px; align-content: start; }
+.convo h4 { margin: 0; font: 500 12px/1.3 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.convo ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-height: 60px; }
+.convo li { font-size: 13px; line-height: 1.4; padding: 7px 9px; border-radius: 6px; border-left: 3px solid; }
+.convo li.ai { border-color: var(--ai); background: var(--ai-soft); }
+.convo li.code { border-color: var(--code); background: var(--code-soft); }
+.convo li.new { box-shadow: 0 0 0 1.5px var(--ink); }
+.convo li.reading { outline: 1.5px dashed var(--ai); outline-offset: 1px; }
+.convo .empty { color: var(--muted); font-size: 13px; font-style: italic; }
+.convo li em { font-style: normal; font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) { .convo li.new { animation: pop .25s ease-out; } }
+@keyframes pop { from { transform: translateY(-4px); opacity: .5; } to { transform: none; opacity: 1; } }
+
+/* Agent cards */
+.agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 14px; align-content: start; }
+.card-head { display: grid; gap: 6px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tabs button { font: 500 13.5px var(--body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--ai); border-color: var(--ai); background: var(--ai-soft); }
+dl.anatomy { margin: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 0; }
+dl.anatomy dt, dl.anatomy dd { margin: 0; padding: 9px 0; border-top: 1px solid var(--line); }
+dl.anatomy dt { font: 500 11.5px/1.6 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+dl.anatomy dt.c { color: var(--code); }
+dl.anatomy dt.a { color: var(--ai); }
+dl.anatomy dd { font-size: 14px; }
+dd .no { color: var(--warn); }
+dd .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+dd ul { margin: 0; padding-left: 18px; }
+
+.note { font-size: 13.5px; color: var(--muted); }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Trade Simulator</div>
+    <h1>How the AI agents in Trade Simulator work</h1>
+    <p class="lede">Trade Simulator is a practice trading app. It manages a pretend portfolio of US stocks with virtual money, so no real money is ever at risk. Two AI agents research the market and decide what to buy and sell. The app's own code checks every decision before anything happens.</p>
+    <div class="legend" aria-label="Colour key">
+      <span><i class="sw ai"></i> The AI decides</span>
+      <span><i class="sw code"></i> The app's own code does it, with fixed rules</span>
+    </div>
+  </header>
+
+  <!-- 0. MEET THE AGENTS -->
+  <section id="meet">
+    <div class="eyebrow">The cast</div>
+    <h2>Two agents, each with two jobs</h2>
+    <div class="cast">
+      <div class="cast-card">
+        <h3>Trading Agent</h3>
+        <ul>
+          <li><strong>Trading run:</strong> decides what to buy, sell or hold.</li>
+          <li><strong>Strategy review:</strong> writes its own investment strategy, and judges it every week.</li>
+        </ul>
+      </div>
+      <div class="cast-card">
+        <h3>Research Agent</h3>
+        <ul>
+          <li><strong>Research request:</strong> looks up prices, news and web articles when the Trading Agent asks.</li>
+          <li><strong>Watchlist refresh:</strong> picks the short list of stocks the Trading Agent is allowed to buy.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1. THE LOOP -->
+  <section id="loop">
+    <div class="eyebrow">1 · How the two agents think</div>
+    <h2>Both agents think in a loop of turns</h2>
+    <p>The Trading Agent and the Research Agent work the same way. A <button class="term" data-tip="One call to the AI model. In a turn the model reads the whole conversation so far, then either asks for tools or gives its final answer.">turn</button> is one call to the AI model. Each turn the model reads <strong>everything so far</strong>, then does one of two things: asks the code to run <button class="term" data-tip="A function the agent can ask for, such as 'get quotes' or 'web search'. The agent never touches data directly: the app's code runs the tool and hands back the result as text.">tools</button>, or gives its final answer. Tool results are added to the conversation, so every turn sees more than the one before.</p>
+
+    <figure class="panel">
+      <div class="scroll">
+      <svg viewBox="0 0 900 270" role="img" aria-label="The agent loop: the conversation goes to the model for one turn; the model either asks for tools, which the code runs and adds to the conversation before the next turn, or gives a final answer that ends the loop.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        </defs>
+        <!-- conversation -->
+        <rect class="code-box" x="20" y="70" width="190" height="110" rx="8" stroke-width="2"/>
+        <text x="115" y="98" text-anchor="middle" font-weight="600" font-size="14">Conversation so far</text>
+        <rect class="plain-box" x="42" y="110" width="146" height="14" rx="3"/>
+        <rect class="plain-box" x="42" y="128" width="146" height="14" rx="3"/>
+        <rect class="plain-box" x="42" y="146" width="146" height="14" rx="3"/>
+        <text x="115" y="200" text-anchor="middle" font-size="12" class="code-t">grows every turn</text>
+
+        <!-- model -->
+        <line class="edge" x1="210" y1="125" x2="296" y2="125" marker-end="url(#ah)"/>
+        <text x="253" y="114" text-anchor="middle" font-size="12">all of it</text>
+        <rect class="ai-box" x="300" y="80" width="170" height="90" rx="8" stroke-width="2"/>
+        <text x="385" y="115" text-anchor="middle" font-weight="600" font-size="14">AI model</text>
+        <text x="385" y="135" text-anchor="middle" font-size="12.5" class="ai-t">1 turn = 1 call</text>
+        <text x="385" y="152" text-anchor="middle" font-size="12" class="muted-t">reads, then chooses</text>
+
+        <!-- choice: tools -->
+        <path class="edge" d="M470,105 L560,40" marker-end="url(#ah)"/>
+        <text x="505" y="52" text-anchor="end" font-size="12" class="ai-t">asks for tools</text>
+        <rect class="code-box" x="565" y="14" width="200" height="56" rx="8" stroke-width="2"/>
+        <text x="665" y="38" text-anchor="middle" font-weight="600" font-size="13.5">Code runs the tools</text>
+        <text x="665" y="56" text-anchor="middle" font-size="12" class="code-t">quotes, news, search…</text>
+        <path class="edge" d="M665,14 L665,4 L115,4 L115,66" marker-end="url(#ah)"/>
+        <text x="400" y="20" text-anchor="middle" font-size="12" class="code-t">results added → next turn</text>
+
+        <!-- choice: answer -->
+        <path class="edge" d="M470,145 L560,205" marker-end="url(#ah)"/>
+        <text x="518" y="202" text-anchor="end" font-size="12" class="ai-t">answers</text>
+        <rect class="ai-box" x="565" y="180" width="200" height="56" rx="8" stroke-width="2"/>
+        <text x="665" y="204" text-anchor="middle" font-weight="600" font-size="13.5">Final answer</text>
+        <text x="665" y="222" text-anchor="middle" font-size="12" class="ai-t">in a fixed format</text>
+        <line class="edge" x1="765" y1="208" x2="800" y2="208" marker-end="url(#ah)"/>
+        <text x="806" y="204" font-size="12.5" font-weight="600">Loop ends</text>
+        <text x="806" y="220" font-size="12" class="code-t">code checks it</text>
+
+        <!-- ceiling -->
+        <text x="385" y="230" text-anchor="middle" font-size="12" class="warn-t">Turn limit reached → the run fails</text>
+        <line class="edge dash" x1="385" y1="170" x2="385" y2="216"/>
+      </svg>
+      </div>
+      <figcaption>The model never runs anything itself. It only reads text and writes text. The app's code runs every tool, adds the result to the conversation, and checks the final answer.</figcaption>
+    </figure>
+
+    <p class="note">Every job has a limit on how many turns it may take; section 2 shows them. Each turn sends the whole growing conversation again, so later turns cost more than early ones.</p>
+  </section>
+
+  <!-- 1b. STEP THROUGH -->
+  <section id="example">
+    <div class="eyebrow">1 · Step through it</div>
+    <h2>One trading run, turn by turn</h2>
+    <p>An illustrative run. Use <strong>Next</strong> to watch both conversations grow. The Research Agent gets <strong>its own, separate conversation</strong>: it never sees the Trading Agent's starting text.</p>
+    <div class="panel stepper">
+      <div class="step-side">
+        <div class="controls">
+          <button type="button" id="prev">Back</button>
+          <button type="button" id="next">Next</button>
+          <span class="count" id="count"></span>
+        </div>
+        <div class="dots" id="dots" aria-hidden="true"></div>
+        <span class="who" id="who"></span>
+        <div class="step-title" id="stitle" aria-live="polite"></div>
+        <p class="step-detail" id="sdetail"></p>
+      </div>
+      <div class="convos">
+        <div class="convo"><h4>Trading Agent's conversation</h4><ol id="convT"></ol></div>
+        <div class="convo"><h4>Research Agent's conversation</h4><ol id="convR"></ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. THE AGENTS -->
+  <section id="agents">
+    <div class="eyebrow">2 · What each agent is made of</div>
+    <h2>Inside the Trading Agent and the Research Agent</h2>
+    <p>The Trading Agent and the Research Agent are built from the same parts: a goal, a model, a memory, a loop, tools and an output. What differs is how each part is set for each of their four jobs. One thing surprises most people: <strong>neither agent remembers anything between runs.</strong> Each run starts fresh, and the app's code rebuilds the agent's memory from saved data and writes it into the starting text.</p>
+
+    <figure class="panel">
+      <div class="scroll">
+      <svg viewBox="0 0 960 420" role="img" aria-label="One trading run end to end: code builds the Trading Agent's memory as a text briefing from saved data and today's prices; the Trading Agent loops and may ask the Research Agent for research up to three times, and each request starts a new Research Agent loop that asks the code to run tools; the Trading Agent proposes orders; plain code with five fixed rules, no AI, executes or rejects each order and saves the run, which the next run reads.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        </defs>
+        <!-- saved data -->
+        <path class="code-box" stroke-width="2" d="M20,45 a62,12 0 0 0 124,0 v100 a62,12 0 0 1 -124,0 z"/>
+        <ellipse class="code-box" stroke-width="2" cx="82" cy="45" rx="62" ry="12"/>
+        <text x="82" y="94" text-anchor="middle" font-weight="600" font-size="13.5">Saved data</text>
+        <text x="82" y="112" text-anchor="middle" font-size="12" class="code-t">portfolio, trades,</text>
+        <text x="82" y="127" text-anchor="middle" font-size="12" class="code-t">strategy, watchlist</text>
+
+        <!-- 1: memory -->
+        <line class="edge" x1="144" y1="95" x2="171" y2="95" marker-end="url(#ah2)"/>
+        <rect class="code-box" x="175" y="40" width="190" height="110" rx="8" stroke-width="2"/>
+        <text x="270" y="64" text-anchor="middle" font-weight="600" font-size="13.5">Code builds the</text>
+        <text x="270" y="81" text-anchor="middle" font-weight="600" font-size="13.5">agent's memory</text>
+        <text x="270" y="102" text-anchor="middle" font-size="11.5" class="code-t">a text briefing: holdings,</text>
+        <text x="270" y="117" text-anchor="middle" font-size="11.5" class="code-t">today's prices, strategy,</text>
+        <text x="270" y="132" text-anchor="middle" font-size="11.5" class="code-t">watchlist, market overview</text>
+
+        <line class="edge" x1="365" y1="95" x2="396" y2="95" marker-end="url(#ah2)"/>
+        <text x="381" y="85" text-anchor="middle" font-size="11">reads</text>
+        <rect class="ai-box" x="400" y="40" width="170" height="110" rx="8" stroke-width="2"/>
+        <text x="485" y="78" text-anchor="middle" font-weight="600" font-size="14">Trading Agent</text>
+        <text x="485" y="98" text-anchor="middle" font-size="12" class="ai-t">loop, max <tspan data-from="TRADING_MAX_TURNS">10</tspan> turns</text>
+        <text x="485" y="116" text-anchor="middle" font-size="12" class="muted-t">decides buy / sell / hold</text>
+
+        <line class="edge" x1="570" y1="95" x2="626" y2="95" marker-end="url(#ah2)"/>
+        <text x="598" y="77" text-anchor="middle" font-size="11.5">proposed</text>
+        <text x="598" y="89" text-anchor="middle" font-size="11.5">orders</text>
+
+        <!-- 3: rule check -->
+        <rect class="code-box" x="630" y="40" width="160" height="110" rx="8" stroke-width="2"/>
+        <text x="710" y="70" text-anchor="middle" font-weight="600" font-size="13.5">Rule check</text>
+        <text x="710" y="87" text-anchor="middle" font-weight="600" font-size="13.5">on every order</text>
+        <text x="710" y="108" text-anchor="middle" font-size="12" class="code-t"><tspan data-from="ORDER_RULE_COUNT">5</tspan> fixed rules</text>
+        <text x="710" y="124" text-anchor="middle" font-size="12" class="code-t">plain code, no AI</text>
+
+        <line class="edge" x1="790" y1="95" x2="816" y2="95" marker-end="url(#ah2)"/>
+        <rect class="code-box" x="820" y="40" width="125" height="110" rx="8" stroke-width="2"/>
+        <text x="882" y="68" text-anchor="middle" font-size="12.5" font-weight="600">✓ passes:</text>
+        <text x="882" y="84" text-anchor="middle" font-size="12" class="code-t">executed</text>
+        <text x="882" y="104" text-anchor="middle" font-size="12.5" font-weight="600">✗ fails:</text>
+        <text x="882" y="120" text-anchor="middle" font-size="12" class="code-t">rejected, with why</text>
+        <text x="882" y="139" text-anchor="middle" font-size="11.5" class="muted-t">run saved</text>
+
+        <!-- 2: research -->
+        <path class="edge" d="M455,150 L455,256" marker-end="url(#ah2)"/>
+        <text x="447" y="196" text-anchor="end" font-size="12">asks for research</text>
+        <text x="447" y="211" text-anchor="end" font-size="12" class="muted-t">max <tspan data-from="MAX_RESEARCH_CALLS">3</tspan> per run</text>
+        <path class="edge" d="M515,256 L515,154" marker-end="url(#ah2)"/>
+        <text x="523" y="204" font-size="12">research report</text>
+
+        <rect class="ai-box" x="400" y="260" width="170" height="100" rx="8" stroke-width="2"/>
+        <text x="485" y="288" text-anchor="middle" font-weight="600" font-size="14">Research Agent</text>
+        <text x="485" y="307" text-anchor="middle" font-size="12" class="ai-t">a new loop for every</text>
+        <text x="485" y="322" text-anchor="middle" font-size="12" class="ai-t">research request,</text>
+        <text x="485" y="337" text-anchor="middle" font-size="12" class="ai-t">max <tspan data-from="RESEARCH_MAX_TURNS">12</tspan> turns each</text>
+
+        <line class="edge" x1="570" y1="290" x2="626" y2="290" marker-end="url(#ah2)"/>
+        <text x="598" y="282" text-anchor="middle" font-size="11.5">calls</text>
+        <line class="edge" x1="630" y1="330" x2="574" y2="330" marker-end="url(#ah2)"/>
+        <text x="602" y="346" text-anchor="middle" font-size="11.5">results</text>
+        <rect class="code-box" x="630" y="260" width="200" height="100" rx="8" stroke-width="2"/>
+        <text x="730" y="286" text-anchor="middle" font-weight="600" font-size="13.5">Tools (code runs them)</text>
+        <text x="730" y="306" text-anchor="middle" font-size="12" class="code-t">quotes · company news</text>
+        <text x="730" y="323" text-anchor="middle" font-size="12" class="code-t">market news · key metrics</text>
+        <text x="730" y="340" text-anchor="middle" font-size="12" class="code-t">web search (max <tspan data-from="DECISION_MAX_SEARCHES">5</tspan>)</text>
+
+        <!-- return to saved data -->
+        <path class="edge dash" d="M882,150 L882,400 L82,400 L82,161" marker-end="url(#ah2)"/>
+        <text x="270" y="393" text-anchor="middle" font-size="12" class="muted-t">the next run builds memory from here</text>
+      </svg>
+      </div>
+      <figcaption>One trading run, end to end. Orange boxes are where the AI decides; teal boxes are plain code. The AI only proposes orders. Whether an order happens is decided by <span data-from="ORDER_RULE_COUNT">5</span> fixed rules, with no AI involved: a buy must be on the watchlist · a current price must exist · there must be enough cash for the trade plus the $<span data-from="FEE_PER_TRADE">1</span> fee · you can't sell shares you don't hold · a buy can't take one stock above <span data-from="MAX_POSITION_PERCENT">20</span>% of the portfolio. Orders execute at the prices the code fetched at the start of the run.</figcaption>
+    </figure>
+
+    <div class="agents">
+      <article class="card" data-agent="trading">
+        <div class="card-head">
+          <h3>Trading Agent</h3>
+          <div class="tabs" role="tablist" aria-label="Trading Agent jobs">
+            <button type="button" role="tab" id="tab-trade" aria-selected="true" data-job="trade">Trading run</button>
+            <button type="button" role="tab" id="tab-review" aria-selected="false" data-job="review">Strategy review</button>
+          </div>
+        </div>
+        <dl class="anatomy" data-job="trade">
+          <dt>Started by</dt><dd><strong>Run now</strong>, or the schedule chosen in Settings: daily at market open, or every 15 minutes. The market must be open.</dd>
+          <dt>Goal</dt><dd>Beat the S&amp;P 500 (<button class="term" data-tip="The benchmark: SPY is a fund that tracks the S&P 500. 'Beating SPY' means the portfolio grew more than the market as a whole.">SPY</button>) over time. Holding cash is a decision too.</dd>
+          <dt>Model</dt><dd>Chosen in Settings. Same model for both agents, read fresh at the start of every run.</dd>
+          <dt class="c">Memory</dt><dd>Written by code into the starting text:
+            <ul><li>cash, total value, holdings</li><li>why each stock still held was bought</li><li>current strategy</li><li><button class="term" data-tip="A short list of S&P 500 stocks, chosen by the watchlist refresh. The Trading Agent may only buy these.">watchlist</button> with reasons</li><li>latest <button class="term" data-tip="A short summary of the economy and market news, written by the last watchlist refresh. It may be days old; the agent sees its date.">market overview</button></li><li>performance vs. SPY</li><li>this run's research budget</li></ul>
+            <span class="no">Does not see:</span> past runs, stocks already sold, its own earlier thinking.</dd>
+          <dt class="a">Loop</dt><dd>Up to <span class="num" data-from="TRADING_MAX_TURNS">10</span> turns.</dd>
+          <dt class="a">Tools</dt><dd>Ask the Research Agent, at most <span class="num" data-from="MAX_RESEARCH_CALLS">3</span> times per run. Optional <button class="term" data-tip="Model Context Protocol: a standard way to plug extra tools in from outside the app. The app supports it, but none are set up today.">MCP</button> tools: none set up.</dd>
+          <dt class="a">Output</dt><dd>Orders, each with a reason and the strategy section it follows, plus a summary. In a <button class="term" data-tip="The agent must answer in a set structure (for example a list of orders with fields), not free text, so the code can check it.">fixed format</button>.</dd>
+          <dt class="c">Then code</dt><dd>Checks every order: buys must be on the watchlist · a price must exist · enough cash for trade + $<span data-from="FEE_PER_TRADE">1</span> fee · can't sell shares not held · a buy can't take one stock above <span class="num"><span data-from="MAX_POSITION_PERCENT">20</span>%</span> of the portfolio. Sells run first. Passing orders execute; the rest are rejected with a reason. The run is saved.</dd>
+        </dl>
+        <dl class="anatomy" data-job="review" hidden>
+          <dt>Started by</dt><dd>The <strong>Review</strong> button; the weekly schedule (<span data-from="REVIEW_DELAY_MINUTES">15</span> min after the week's last close); or automatically before a trading run when no strategy exists. Reviewing needs at least <span class="num" data-from="REVIEW_MIN_DAYS">10</span> trading days and <span class="num" data-from="REVIEW_MIN_RUNS">5</span> completed runs on the current strategy. The <em>first</em> strategy can be written any time.</dd>
+          <dt>Goal</dt><dd>Same goal. This time it writes or reviews its own strategy instead of trading.</dd>
+          <dt>Model</dt><dd>Same model as trading runs.</dd>
+          <dt class="c">Memory</dt><dd>The richest of all four jobs:
+            <ul><li>portfolio, watchlist, market overview</li><li>current strategy</li><li>a <button class="term" data-tip="Computed by the code, not the AI: return vs. SPY, number of runs and trades, fees, closed trades, average cash, and how many orders followed the strategy.">scorecard</button> computed by code</li><li>every order in the period, with its reason</li><li>earlier strategy versions and why they were kept or changed</li></ul>
+            First strategy: no scorecard or history yet.</dd>
+          <dt class="a">Loop</dt><dd>Up to <span class="num" data-from="REVIEW_MAX_TURNS">2</span> turns: one answer.</dd>
+          <dt class="a">Tools</dt><dd><span class="no">None.</span> No research, no MCP.</dd>
+          <dt class="a">Output</dt><dd>Keep or change, with reasons; were targets met; was the strategy followed; the new strategy text.</dd>
+          <dt class="c">Then code</dt><dd>Checks the answer is complete. If the strategy changed, saves it as a new version. Trading runs follow it from then on.</dd>
+        </dl>
+      </article>
+
+      <article class="card" data-agent="research">
+        <div class="card-head">
+          <h3>Research Agent</h3>
+          <div class="tabs" role="tablist" aria-label="Research Agent jobs">
+            <button type="button" role="tab" id="tab-ask" aria-selected="true" data-job="ask">Research request</button>
+            <button type="button" role="tab" id="tab-refresh" aria-selected="false" data-job="refresh">Watchlist refresh</button>
+          </div>
+        </div>
+        <dl class="anatomy" data-job="ask">
+          <dt>Started by</dt><dd>The Trading Agent asking, inside one of its turns.</dd>
+          <dt>Goal</dt><dd>Research stocks and report facts with sources. It never decides trades.</dd>
+          <dt>Model</dt><dd>Same model as the Trading Agent.</dd>
+          <dt class="c">Memory</dt><dd>Only the request text, plus a note listing current holdings and why each was bought.
+            <span class="no">Sees nothing else</span> from the Trading Agent.</dd>
+          <dt class="a">Loop</dt><dd>Up to <span class="num" data-from="RESEARCH_MAX_TURNS">12</span> turns, each time it is asked.</dd>
+          <dt class="a">Tools</dt><dd>
+            <ul><li>quotes (up to <span data-from="MAX_SYMBOLS_PER_CALL">25</span> stocks per call)</li><li>company news (1–30 days back)</li><li>market news</li><li>key metrics</li><li>web search: <span class="num" data-from="DECISION_MAX_SEARCHES">5</span> per trading run, shared across all requests</li></ul>
+            Only web search is limited. Optional MCP: none set up.</dd>
+          <dt class="a">Output</dt><dd>A research report: findings with sources, in a fixed format.</dd>
+          <dt class="c">Then code</dt><dd>Keeps only source links the tools really returned, and attaches each stock's price and day change.</dd>
+        </dl>
+        <dl class="anatomy" data-job="refresh" hidden>
+          <dt>Started by</dt><dd>The <strong>Refresh watchlist</strong> button, any time, even with the market closed. Also runs once automatically when there is no watchlist yet and an AI key is saved.</dd>
+          <dt>Goal</dt><dd>Its research instructions plus extra refresh instructions: pick stocks from the <button class="term" data-tip="The allowed stocks: the S&P 500. Picks from outside it are dropped.">stock pool</button> and write the market overview.</dd>
+          <dt>Model</dt><dd>Same model.</dd>
+          <dt class="c">Memory</dt><dd>Today's date, the current watchlist with reasons, the list of S&amp;P 500 symbols, the search budget.</dd>
+          <dt class="a">Loop</dt><dd>Up to <span class="num" data-from="REFRESH_MAX_TURNS">40</span> turns.</dd>
+          <dt class="a">Tools</dt><dd>The same five tools; web search up to <span class="num" data-from="REFRESH_MAX_SEARCHES">20</span>.</dd>
+          <dt class="a">Output</dt><dd>Stock picks with reasons, plus the market overview that later trading runs read.</dd>
+          <dt class="c">Then code</dt><dd>Drops picks outside the S&amp;P 500, duplicates, and anything past <span class="num" data-from="MAX_WATCHLIST_SIZE">20</span> stocks. If nothing valid is left, the old watchlist stays.</dd>
+        </dl>
+      </article>
+    </div>
+
+    <h3>Turn limits, one per job</h3>
+    <div class="facts">
+      <div class="fact"><b data-from="TRADING_MAX_TURNS">10</b><span>Trading run: the Trading Agent's turns in one run</span></div>
+      <div class="fact"><b data-from="RESEARCH_MAX_TURNS">12</b><span>Research request: the Research Agent's turns <em>each time</em> it is asked</span></div>
+      <div class="fact"><b data-from="REFRESH_MAX_TURNS">40</b><span>Watchlist refresh: high, because it makes many free tool calls</span></div>
+      <div class="fact"><b data-from="REVIEW_MAX_TURNS">2</b><span>Strategy review: no tools, just one answer</span></div>
+    </div>
+    <p class="note">These are <strong>safety ceilings, not targets</strong>. A normal run ends well before them. They stop a confused model from looping forever. If a job hits its limit, that job fails. The real limits on research are separate: <span data-from="MAX_RESEARCH_CALLS">3</span> research requests and <span data-from="DECISION_MAX_SEARCHES">5</span> web searches per trading run.</p>
+  </section>
+
+  <!-- 3. OVER TIME -->
+  <section id="time">
+    <div class="eyebrow">3 · How the jobs feed each other</div>
+    <h2>Over days and weeks</h2>
+    <p>No job talks to another directly, except the Trading Agent asking for research. Everything else passes through saved data: one job saves its result, and the code puts it into the next job's starting text. Only one job runs at a time.</p>
+    <figure class="panel">
+      <div class="scroll">
+      <svg viewBox="0 0 900 250" role="img" aria-label="Over time: the watchlist refresh writes the watchlist and market overview that trading runs read; trading runs produce trades with reasons that the strategy review judges; the review writes a new strategy version that trading runs then follow.">
+        <defs>
+          <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        </defs>
+        <rect class="ai-box" x="20" y="90" width="190" height="76" rx="8" stroke-width="2"/>
+        <text x="115" y="118" text-anchor="middle" font-weight="600" font-size="14">Watchlist refresh</text>
+        <text x="115" y="137" text-anchor="middle" font-size="12" class="ai-t">Research Agent</text>
+        <text x="115" y="154" text-anchor="middle" font-size="12" class="muted-t">on request</text>
+
+        <line class="edge" x1="210" y1="128" x2="346" y2="128" marker-end="url(#ah3)"/>
+        <text x="278" y="114" text-anchor="middle" font-size="12">watchlist +</text>
+        <text x="278" y="148" text-anchor="middle" font-size="12">market overview</text>
+
+        <rect class="ai-box" x="350" y="90" width="200" height="76" rx="8" stroke-width="2"/>
+        <rect class="ai-box" x="356" y="96" width="200" height="76" rx="8" stroke-width="2" opacity=".5"/>
+        <rect class="ai-box" x="350" y="90" width="200" height="76" rx="8" stroke-width="2"/>
+        <text x="450" y="118" text-anchor="middle" font-weight="600" font-size="14">Trading runs</text>
+        <text x="450" y="137" text-anchor="middle" font-size="12" class="ai-t">Trading Agent</text>
+        <text x="450" y="154" text-anchor="middle" font-size="12" class="muted-t">many: daily or every 15 min</text>
+
+        <path class="edge" d="M550,108 C620,40 690,40 716,80" marker-end="url(#ah3)"/>
+        <text x="630" y="40" text-anchor="middle" font-size="12">trades + their reasons</text>
+
+        <rect class="ai-box" x="690" y="90" width="190" height="76" rx="8" stroke-width="2"/>
+        <text x="785" y="118" text-anchor="middle" font-weight="600" font-size="14">Strategy review</text>
+        <text x="785" y="137" text-anchor="middle" font-size="12" class="ai-t">Trading Agent, no tools</text>
+        <text x="785" y="154" text-anchor="middle" font-size="12" class="muted-t">weekly, or on request</text>
+
+        <path class="edge" d="M716,166 C690,226 620,226 556,160" marker-end="url(#ah3)"/>
+        <text x="630" y="232" text-anchor="middle" font-size="12">new strategy version (or keep)</text>
+        <text x="450" y="206" text-anchor="middle" font-size="12" class="code-t">the code scores each strategy</text>
+        <text x="450" y="222" text-anchor="middle" font-size="12" class="code-t">before the review reads it</text>
+      </svg>
+      </div>
+      <figcaption>The learning loop. The Trading Agent writes a strategy, trades by it, and every week judges it against a scorecard the code computes. All arrows here go through saved data, not from agent to agent.</figcaption>
+    </figure>
+  </section>
+
+  <footer>The numbers on this page are filled in from the code automatically. The turn-by-turn run is an illustration; real runs differ in which stocks and tools they use. This page explains the agents to people; the code is the real reference.</footer>
+</div>
+<div id="tip" role="tooltip" hidden></div>
+
+<script>
+(() => {
+  // ---- Term hints: hover, focus or tap ----
+  const tip = document.getElementById('tip');
+  let pinned = null;
+  function show(el) {
+    tip.textContent = el.dataset.tip; tip.hidden = false;
+    const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    let left = Math.min(Math.max(16, r.left), window.innerWidth - t.width - 16);
+    let top = r.bottom + 8;
+    if (top + t.height > window.innerHeight - 8) top = r.top - t.height - 8;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function hide() { tip.hidden = true; pinned = null; }
+  document.querySelectorAll('.term').forEach(el => {
+    el.setAttribute('aria-describedby', 'tip');
+    el.addEventListener('mouseenter', () => show(el));
+    el.addEventListener('mouseleave', () => { if (pinned !== el) tip.hidden = true; });
+    el.addEventListener('focus', () => show(el));
+    el.addEventListener('blur', hide);
+    el.addEventListener('click', e => { e.stopPropagation(); if (pinned === el) hide(); else { pinned = el; show(el); } });
+  });
+  document.addEventListener('click', hide);
+  window.addEventListener('scroll', () => { if (!tip.hidden) hide(); }, { passive: true });
+
+  // ---- Job tabs on the agent cards ----
+  document.querySelectorAll('.card').forEach(card => {
+    const tabs = card.querySelectorAll('[role=tab]');
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+      tabs.forEach(t => t.setAttribute('aria-selected', String(t === tab)));
+      card.querySelectorAll('dl.anatomy').forEach(dl => dl.hidden = dl.dataset.job !== tab.dataset.job);
+    }));
+  });
+
+  // ---- Step-through example ----
+  // who: 'code' or 'ai'; agent: 'T' or 'R' (whose turn); add: [column, kind, html]
+  // Numbers come from the marked elements above, which are filled from the code.
+  const n = name => Number(document.querySelector(`[data-from="${name}"]`).textContent);
+  const steps = [
+    { who: 'code', label: 'Code', title: 'The code builds the Trading Agent’s memory',
+      detail: 'The agent remembers nothing from earlier runs. The code reads saved data, fetches today’s prices, and writes it all into one text briefing. That briefing is everything the agent knows.',
+      add: ['T', 'code', '<em>Memory briefing:</em> cash and holdings, why each holding was bought, today’s prices, strategy, watchlist, market overview, performance vs. SPY, research budget'] },
+    { who: 'ai', agent: 'T', turn: 1, label: 'Trading Agent · turn 1', title: 'Reads the starting text, asks for research',
+      detail: `Its only tool is asking the Research Agent. This uses 1 of its ${n('MAX_RESEARCH_CALLS')} research calls.`,
+      add: ['T', 'ai', `<em>Tool call:</em> ask Research Agent: “Check news and price moves for AAPL and MSFT” (1 of ${n('MAX_RESEARCH_CALLS')})`] },
+    { who: 'code', label: 'Code', title: 'A new, separate conversation starts',
+      detail: 'The Research Agent gets only the request and a note about current holdings. Nothing from the Trading Agent’s starting text.',
+      add: ['R', 'code', '<em>Request</em> + note: current holdings and why each was bought'] },
+    { who: 'ai', agent: 'R', turn: 1, label: 'Research Agent · turn 1', title: 'Asks for two tools in one turn',
+      detail: 'One turn can ask for several tools at once.',
+      add: ['R', 'ai', '<em>Tool calls:</em> market news · quotes for AAPL, MSFT'] },
+    { who: 'code', label: 'Code', title: 'The code runs both tools',
+      detail: 'The results are added to the Research Agent’s conversation as text.',
+      add: ['R', 'code', '<em>Results:</em> today’s market headlines · prices and day change'] },
+    { who: 'ai', agent: 'R', turn: 2, label: 'Research Agent · turn 2', title: 'Reads everything so far, digs deeper',
+      detail: 'The conversation is longer now, so this turn sends more text to the model than turn 1.',
+      add: ['R', 'ai', '<em>Tool call:</em> company news for AAPL, last 7 days'] },
+    { who: 'code', label: 'Code', title: 'The code runs the tool',
+      detail: 'Company news is free and not limited.',
+      add: ['R', 'code', '<em>Result:</em> AAPL headlines and summaries'] },
+    { who: 'ai', agent: 'R', turn: 3, label: 'Research Agent · turn 3', title: 'Uses a web search',
+      detail: `Web search is the only limited tool: ${n('DECISION_MAX_SEARCHES')} per trading run, shared across all research requests.`,
+      add: ['R', 'ai', `<em>Tool call:</em> web search “Apple earnings outlook” (1 of ${n('DECISION_MAX_SEARCHES')})`] },
+    { who: 'code', label: 'Code', title: 'The code runs the search',
+      detail: 'Search results come back with their links. Only links that came back from a tool can be cited later.',
+      add: ['R', 'code', '<em>Result:</em> web articles with links'] },
+    { who: 'ai', agent: 'R', turn: 4, label: 'Research Agent · turn 4', title: 'Gives its final answer',
+      detail: `Its loop ends after 4 of its ${n('RESEARCH_MAX_TURNS')} allowed turns. The answer is a research report in a fixed format.`,
+      add: ['R', 'ai', '<em>Final answer:</em> research report: findings with sources'] },
+    { who: 'code', label: 'Code', title: 'The report goes back to the Trading Agent',
+      detail: 'The code drops any source link the tools didn’t return, then hands the report back as the result of the Trading Agent’s tool call.',
+      add: ['T', 'code', '<em>Tool result:</em> the research report'] },
+    { who: 'ai', agent: 'T', turn: 2, label: 'Trading Agent · turn 2', title: 'Reads it all, gives its final answer',
+      detail: `It could ask for more research (${n('MAX_RESEARCH_CALLS') - 1} calls left), but decides it has enough. Its loop ends after 2 of ${n('TRADING_MAX_TURNS')} turns.`,
+      add: ['T', 'ai', '<em>Final answer:</em> BUY 10 MSFT, with a reason and the strategy section it follows. Hold the rest.'] },
+    { who: 'code', label: 'Code', title: 'The code checks the order and decides',
+      detail: `On the watchlist? Price available? Enough cash including the fee? Under ${n('MAX_POSITION_PERCENT')}% of the portfolio? If yes, it executes; if not, it is rejected with the reason. Then the run is saved for the next run’s memory.`,
+      add: null },
+  ];
+
+  const $ = id => document.getElementById(id);
+  const dots = $('dots');
+  steps.forEach(s => { const i = document.createElement('i'); i.className = s.who; dots.appendChild(i); });
+  let at = 0;
+
+  function render() {
+    const s = steps[at];
+    const who = $('who');
+    who.className = 'who ' + s.who; who.textContent = s.label;
+    $('stitle').textContent = s.title;
+    let detail = s.detail;
+    const cols = { T: [], R: [] };
+    steps.slice(0, at + 1).forEach((st, i) => { if (st.add) cols[st.add[0]].push({ kind: st.add[1], html: st.add[2], i }); });
+    if (s.agent) {
+      // The model reads everything in its own conversation before this turn's new item.
+      const read = cols[s.agent].length - 1;
+      detail = `Reads all ${read} item${read === 1 ? '' : 's'} in its conversation. ` + detail;
+    }
+    $('sdetail').textContent = detail;
+    for (const key of ['T', 'R']) {
+      const ol = $('conv' + key);
+      ol.innerHTML = '';
+      if (!cols[key].length) { const li = document.createElement('li'); li.className = 'empty'; li.style.border = '0'; li.textContent = 'Not started yet'; ol.appendChild(li); continue; }
+      cols[key].forEach((item, idx) => {
+        const li = document.createElement('li');
+        li.className = item.kind + (item.i === at ? ' new' : '') + (s.agent === key && item.i !== at ? ' reading' : '');
+        li.innerHTML = item.html;
+        ol.appendChild(li);
+      });
+    }
+    $('count').textContent = `Step ${at + 1} of ${steps.length}`;
+    $('prev').disabled = at === 0;
+    $('next').textContent = at === steps.length - 1 ? 'Start over' : 'Next';
+    [...dots.children].forEach((d, i) => { d.classList.toggle('on', i === at); d.classList.toggle('done', i < at); });
+  }
+  $('prev').addEventListener('click', () => { if (at > 0) { at--; render(); } });
+  $('next').addEventListener('click', () => { at = (at + 1) % steps.length; render(); });
+  document.querySelector('.stepper').addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') $('next').click();
+    if (e.key === 'ArrowLeft') $('prev').click();
+  });
+  render();
+})();
+</script>

@@ -243,6 +243,15 @@
 - **Alternatives considered:** Deciding per tool (the earlier approach; easy to forget).
 - **Date:** 2026-09-26
 
+### D45: A visual agent map, kept in sync with the code
+- **Choice:** An HTML page, `docs/agent-map.html`, published as a private link. Its numbers are filled from the code automatically; a drift check fails when the agents' structure changes without the page.
+- **Why:**
+  - The user built the app with Claude and still didn't know what a "turn" was or what each agent remembers. People won't read ARCHITECTURE.md; they need a picture.
+  - A hand-drawn page goes out of date quietly, so the numbers are generated and the structure is checked.
+  - It is a summary for people, simplified on purpose (e.g. an illustrative run). Treating it as a source could spread its simplifications into decisions, so the agent reads the code and the decision docs instead.
+- **Alternatives considered:** Mermaid in ARCHITECTURE.md (written for code readers, not people); a screen in the app (a new UI to design and maintain); a one-off page (goes stale silently); a fully generated diagram (how to draw a new tool or job needs judgement, so only the numbers are generated).
+- **Date:** 2026-10-03
+
 ---
 
 ## Architecture

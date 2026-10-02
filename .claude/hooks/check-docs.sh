@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Stop hook: before Claude finishes a turn, check the docs still describe the code
-# (backend/tests/test_docs_in_sync.py). Exit 2 blocks the stop and sends the failures back to Claude.
+# Stop hook: before Claude finishes a turn, fill the agent map's numbers from the code, then check the docs
+# still describe the code (backend/tests/test_docs_in_sync.py). Exit 2 blocks the stop and sends the failures back to Claude.
 input=$(cat)
 cd "${CLAUDE_PROJECT_DIR:-.}/backend" || exit 0
+
+# The agent map's numbers follow the code by themselves (D45); its structure is checked below.
+uv run trade-sim agent-map >/dev/null 2>&1
 
 out=$(uv run pytest tests/test_docs_in_sync.py -q -p no:cacheprovider 2>&1)
 [ $? -eq 0 ] && exit 0

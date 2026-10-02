@@ -6,7 +6,7 @@ A failure here means code changed without its docs. Fix the doc named in the mes
 import re
 from pathlib import Path
 
-from trade_simulator.adapters import config
+from trade_simulator.adapters import agent_map, config
 from trade_simulator.application.run_mode import RUN_MODE_SETTING
 from trade_simulator.application.settings import MODEL_SETTING, PROVIDERS
 
@@ -85,6 +85,23 @@ def test_every_stored_setting_is_listed_in_architecture():
 def test_every_path_named_in_architecture_exists():
     missing = [token for token in _path_tokens(ARCHITECTURE) if not _exists(token)]
     assert not missing, f"ARCHITECTURE.md names paths that no longer exist: {missing}"
+
+
+def test_agent_map_numbers_match_the_code():
+    html = agent_map.AGENT_MAP_PATH.read_bytes().decode("utf-8")
+    assert agent_map.fill_numbers(html, agent_map.current_numbers()) == html, (
+        "docs/agent-map.html shows out-of-date numbers. Run: cd backend && uv run trade-sim agent-map, "
+        "then republish it (see CLAUDE.md)"
+    )
+
+
+def test_agent_map_covers_every_agent_tool_trigger_and_order_rule():
+    html = agent_map.AGENT_MAP_PATH.read_text(encoding="utf-8")
+    problems = agent_map.coverage_problems(agent_map.coverage_in(html), agent_map.current_structure())
+    assert not problems, (
+        "docs/agent-map.html no longer matches the agents (D45). Update its drawings and text, then the "
+        f"'agent-map covers' list at the top, then republish it (see CLAUDE.md): {problems}"
+    )
 
 
 def _generic(text: str) -> str:

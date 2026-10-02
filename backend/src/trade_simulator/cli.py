@@ -5,6 +5,7 @@
     uv run trade-sim run       # one decision run, like "Run now" (market hours only)
     uv run trade-sim review    # the Trading Agent writes or reviews its strategy (D43), like "Review strategy"
     uv run trade-sim status    # portfolio, watchlist, strategy, market status, recent runs
+    uv run trade-sim agent-map # fill the numbers in docs/agent-map.html from the code (D45)
 """
 
 import argparse
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 import uvicorn
 from dotenv import load_dotenv
 
+from trade_simulator.adapters import agent_map
 from trade_simulator.adapters.bootstrap import build_services
 from trade_simulator.adapters.config import BACKEND_DIR, load_config
 from trade_simulator.adapters.web.api import WebServices, create_app
@@ -28,9 +30,14 @@ TRACE_URL = "https://platform.openai.com/traces/trace?trace_id={}"
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="trade-sim", description="AI paper-trading simulator")
-    parser.add_argument("command", choices=["serve", "refresh", "run", "review", "status"])
+    parser.add_argument("command", choices=["serve", "refresh", "run", "review", "status", "agent-map"])
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
+
+    if args.command == "agent-map":  # needs no config or keys
+        changed = agent_map.refresh()
+        print(f"{agent_map.AGENT_MAP_PATH.name}: {'numbers updated' if changed else 'up to date'}")
+        return 0
 
     load_dotenv(BACKEND_DIR / ".env")
     try:

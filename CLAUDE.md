@@ -5,6 +5,7 @@
 - [WHY.md](WHY.md): why each decision was made (same IDs).
 - [ARCHITECTURE.md](ARCHITECTURE.md): where things are in the code (layers, decision → file map, config, tables, endpoints, how to add a provider). Keep it current when files, tables, endpoints or settings change.
 - [PROMPT_LOG.md](PROMPT_LOG.md): why each line in the agent prompts is there, what run caused it, and whether it worked. Also lists problems seen in runs that have not led to a change.
+- `docs/agent-map.html` is **not** a source of truth. It is a visual summary for people (D45). Don't read it to make decisions or plan changes; update it only to keep it in sync.
 
 ## Rules
 - Before designing or writing code, read the decision table in PROBLEM_STATEMENT.md to find the D#s the task touches, then read only those `### D#:` entries in WHY.md. Read ARCHITECTURE.md in full before changing code. Skip the decision lookup for small fixes (typos, styling, obvious bugs) that touch no decision. Stay within the current scope.
@@ -32,6 +33,7 @@ Prompts are not tuned run by run; that goes in circles. Before changing anything
 - Frontend: `cd frontend && npm test` (vitest), `npm run build` (the output is served by `trade-sim serve`), `npm run dev` (Vite on :5173, proxies /api to :8000)
 - Model prices shown in Settings: `backend/model_catalogue.json` (update `as_of` when prices change)
 - Agent prompts live in `backend/prompts/*.md` (D25); optional MCP servers in `backend/mcp_servers.json` (D27).
+- Agent map (D45): `cd backend && uv run trade-sim agent-map` refreshes the numbers in `docs/agent-map.html` (the Stop hook also runs it). Whenever that file changes, republish it to https://claude.ai/artifact/MDzWKmZfzLqpemesY3VNWd.
 
 ## Working style
 - Make one decision at a time. Keep information upfront minimal and give a recommendation.
