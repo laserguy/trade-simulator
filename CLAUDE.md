@@ -35,6 +35,11 @@ Prompts are not tuned run by run; that goes in circles. Before changing anything
 - Agent prompts live in `backend/prompts/*.md` (D25); optional MCP servers in `backend/mcp_servers.json` (D27).
 - Agent map (D45): `cd backend && uv run trade-sim agent-map` refreshes the numbers in `docs/agent-map.html` (the Stop hook also runs it). Whenever that file changes, republish it to https://claude.ai/artifact/MDzWKmZfzLqpemesY3VNWd.
 
+## Git
+- Work on `main` only: never create branches. When asked to commit, commit on `main`; when asked to push, push `main`.
+- Commit or push only when asked. Before pushing, fetch and make sure local `main` is up to date with `origin/main`.
+- Before every commit, run the backend tests (`cd backend && uv run pytest`), and the frontend tests (`cd frontend && npm test`) when frontend files changed. If anything fails, don't commit: report the failures.
+
 ## Working style
 - Make one decision at a time. Keep information upfront minimal and give a recommendation.
 - Agree anything user-facing (screens, layout, what each page shows, style) with the user before building it, and record it in the docs first.
