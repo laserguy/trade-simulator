@@ -35,7 +35,7 @@ from trade_simulator.application.schedule import Schedule
 from trade_simulator.application.scheduler import Scheduler
 from trade_simulator.core.errors import ConfigError
 from trade_simulator.application.settings import SettingsError, SettingsService
-from trade_simulator.application.value_history import ValueHistory
+from trade_simulator.application.value_history import ValueHistory, ValuePoint
 from trade_simulator.application.watchlist_view import WatchlistView, WatchlistViewer
 from trade_simulator.adapters.text_links import merge_sources, split_links
 from trade_simulator.core.decision_log import DecisionRun, Finding, RunCost, RunTrigger
@@ -49,6 +49,8 @@ logger = logging.getLogger(__name__)
 TRACE_URL = "https://platform.openai.com/traces/trace?trace_id={}"
 TREND_DAYS = 31  # "Last month" trend line on each watchlist row (D37)
 PERIOD_DAYS = {"1M": 31, "3M": 92, "1Y": 366}  # chart periods (D37)
+# Home chart periods (D32): days back (None = all) and whether to keep one point per trading day.
+HISTORY_PERIODS = {"1W": (7, False), "1M": (31, True), "3M": (92, True), "ALL": (None, True)}
 CENTS = Decimal("0.01")
 
 
@@ -226,19 +228,25 @@ def create_app(services: WebServices, frontend_dist: Path | None = None) -> Fast
         }
 
     @app.get("/api/history")
-    def history() -> dict:
-        # Value chart points, plus each run's executed trades for the chart's markers (D32).
+    def history(period: str = "1M") -> dict:
+        # Value chart points for the period, the live "now" point that ends the chart, and each
+        # run's executed trades in the period for the chart's markers (D32).
+        if period not in HISTORY_PERIODS:
+            raise HTTPException(status_code=400, detail=f"Period must be one of {', '.join(HISTORY_PERIODS)}")
+        days, daily = HISTORY_PERIODS[period]
+        since = services.value_history.since(days)
         runs: dict[str, dict] = {}
         for t in services.repository.executed_trades():
+            if since is not None and t.at < since:
+                continue
             run = runs.setdefault(t.run_id, {"run_id": t.run_id, "at": t.at.isoformat(), "orders": []})
             run["orders"].append(
                 {"side": t.side.value, "quantity": t.quantity, "symbol": t.symbol, "price": _money(t.price)}
             )
+        now = services.value_history.now()
         return {
-            "points": [
-                {"at": p.at.isoformat(), "total_value": _money(p.total_value), "benchmark_value": _money(p.benchmark_value)}
-                for p in services.value_history.points()
-            ],
+            "points": [_value_point(p) for p in services.value_history.points(days, daily)],
+            "now": _value_point(now) if now else None,
             "trades": list(runs.values()),
         }
 
@@ -345,6 +353,10 @@ def _finished(background: set) -> Callable[[asyncio.Task], None]:
 
 def _money(value: Decimal | None) -> str | None:
     return None if value is None else str(value.quantize(CENTS))
+
+
+def _value_point(point: ValuePoint) -> dict:
+    return {"at": point.at.isoformat(), "total_value": _money(point.total_value), "benchmark_value": _money(point.benchmark_value)}
 
 
 def _portfolio_json(snapshot: PortfolioSnapshot) -> dict:

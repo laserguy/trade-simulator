@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta, timezone
+import json
+from dataclasses import replace
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -21,11 +23,14 @@ from trade_simulator.core.strategy_review import (
     ClosedTrade,
     Followed,
     HoldingResult,
+    OrderOutcome,
     ReviewDecision,
     ReviewTrigger,
     Scorecard,
+    StockMove,
     StrategyReview,
     TargetsVerdict,
+    TradingDay,
 )
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
@@ -334,6 +339,12 @@ SCORECARD = Scorecard(
     average_cash_percent=Decimal("39"),
     followed_orders=5,
     deviations=2,
+    order_outcomes=(
+        OrderOutcome(START + timedelta(days=1), Side.BUY, 10, "NVDA", Decimal("120"), Decimal("131"), 9, Decimal("2.1")),
+        OrderOutcome(START + timedelta(days=2), Side.SELL, 5, "AAPL", Decimal("180"), None, 8, None),
+    ),
+    unbought=(StockMove("AMD", Decimal("11.4")), StockMove("TSLA", None)),
+    days=(TradingDay(date(2026, 9, 15), 26, 1, 0, 1, 25, "Held; nothing met What I look for."),),
 )
 
 
@@ -398,6 +409,19 @@ def test_a_change_ends_the_current_version_and_starts_the_next(repo):
     assert repo.current_strategy() == second
     assert second.strategy.position_size == "Start at 4%."
     assert repo.strategy_reviews()[-1] == review
+
+
+def test_a_scorecard_saved_before_outcomes_existed_loads_without_them(repo):
+    repo.save_strategy_review(make_review("rev-1", START, scorecard=SCORECARD), make_version(1, START, "rev-1"))
+    with repo._transaction() as conn:
+        data = json.loads(conn.execute("SELECT scorecard FROM strategy_reviews").fetchone()[0])
+        for key in ("order_outcomes", "unbought", "days"):
+            del data[key]
+        conn.execute("UPDATE strategy_reviews SET scorecard = ?", (json.dumps(data),))
+
+    [review] = repo.strategy_reviews()
+
+    assert review.scorecard == replace(SCORECARD, order_outcomes=(), unbought=(), days=())
 
 
 def test_keep_and_failed_reviews_leave_the_strategy_unchanged(repo):

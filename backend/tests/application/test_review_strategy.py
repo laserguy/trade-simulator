@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -7,7 +7,7 @@ import pytest
 from fakes import FakeAgent, FakeMarketData, FixedClock, WeekdayCalendar
 from trade_simulator.adapters.sqlite_repository import SqliteRepository
 from trade_simulator.application.activity import ActivityFeed
-from trade_simulator.application.ports import AgentUsage, ReviewProposal
+from trade_simulator.application.ports import AgentUsage, DailyBar, ReviewProposal, ValueSnapshot
 from trade_simulator.application.review_strategy import (
     AutomaticReviewNotNeededError,
     StrategyReviewNotAllowedError,
@@ -23,6 +23,7 @@ from trade_simulator.core.strategy_review import (
     Followed,
     ReviewDecision,
     ReviewTrigger,
+    StockMove,
     StrategyReview,
     TargetsVerdict,
 )
@@ -59,11 +60,16 @@ def proposal(decision=ReviewDecision.CHANGE, new_strategy=NEW_STRATEGY, **change
     return ReviewProposal(**{**fields, **changes})
 
 
-def make_runner(repo, agent, now=NOW, guard=None, activity=None, ids=None):
+def bar(day, close):
+    price = Decimal(close)
+    return DailyBar(day, price, price, price, price, price, 1000)
+
+
+def make_runner(repo, agent, now=NOW, guard=None, activity=None, ids=None, prices=None):
     ids = iter(ids or ["rev-new"])
     return StrategyReviewRunner(
         repository=repo,
-        market_data=FakeMarketData({"AAPL": "210", "SPY": "505"}),
+        market_data=FakeMarketData(prices or {"AAPL": "210", "SPY": "505"}),
         calendar=WeekdayCalendar(),
         agent=agent,
         profile=US_PROFILE,
@@ -158,6 +164,27 @@ def test_the_review_is_given_the_scorecard_orders_and_history(repo):
     assert [v.number for v in context.versions] == [1]
     assert [r.id for r in context.reviews] == ["rev-1"]
     assert context.prices == {"AAPL": Decimal("210")}
+
+
+def test_the_scorecard_adds_what_happened_after_the_orders_and_each_trading_day(repo):
+    with_v1_and_five_runs(repo)
+    repo.save_watchlist(Watchlist((WatchlistEntry("AAPL", "Earnings"), WatchlistEntry("MSFT", "Cloud")), V1_START))
+    # MSFT closed at 400 on Friday 11 September, the last close before v1 started.
+    repo.save_daily_bars(US_PROFILE.code, "MSFT", [bar(date(2026, 9, 11), "400")], "test")
+    repo.save_value_snapshot(ValueSnapshot(V1_START + timedelta(days=1, minutes=31), Decimal("10000"), Decimal("500")))
+    agent = FakeAgent(review=proposal())
+
+    result = review(make_runner(repo, agent, prices={"AAPL": "210", "MSFT": "420", "SPY": "505"}))
+
+    card = agent.review_contexts[0].scorecard
+    first = card.order_outcomes[0]
+    assert (first.symbol, first.price, first.price_now, first.benchmark_percent) == (
+        "AAPL", Decimal("200"), Decimal("210"), Decimal("1")
+    )
+    assert card.unbought == (StockMove("MSFT", Decimal("5")),)
+    assert [(d.day, d.runs, d.buys) for d in card.days] == [(date(2026, 9, 15 + day), 1, 1) for day in range(5)]
+    assert result.scorecard == card
+    assert agent.review_contexts[0].prices == {"AAPL": Decimal("210"), "MSFT": Decimal("420")}
 
 
 def test_a_keep_saves_the_review_and_leaves_the_strategy(repo):

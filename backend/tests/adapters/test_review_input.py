@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from trade_simulator.adapters.openai_agents.review_input import render_review_input
@@ -12,11 +13,14 @@ from trade_simulator.core.strategy_review import (
     ClosedTrade,
     Followed,
     HoldingResult,
+    OrderOutcome,
     ReviewDecision,
     ReviewTrigger,
     Scorecard,
+    StockMove,
     StrategyReview,
     TargetsVerdict,
+    TradingDay,
 )
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason, TradingRules
 
@@ -138,6 +142,48 @@ def test_the_scorecard_is_shown_as_computed():
     assert "- Holdings: AAPL +10.0% on cost" in text
     assert "- Average cash: 18.2% of the portfolio" in text
     assert "- Orders naming a section: 5; deviations: 1" in text
+
+
+OUTCOMES = (
+    OrderOutcome(at(9, 15), Side.BUY, 10, "NVDA", Decimal("120"), Decimal("131"), 5, Decimal("2.1")),
+    OrderOutcome(at(9, 16), Side.SELL, 5, "AAPL", Decimal("180"), Decimal("192"), 4, Decimal("1.8")),
+    OrderOutcome(at(9, 25), Side.BUY, 1, "AMD", Decimal("100"), None, 1, None),
+)
+DAYS = (
+    TradingDay(date(2026, 9, 15), 26, 1, 0, 1, 25, "Held; TSLA is above the sell line."),
+    TradingDay(date(2026, 9, 16), 1, 0, 0, 0, 1, ""),
+)
+
+
+def test_the_scorecard_shows_what_happened_after_each_order():
+    text = render_review_input(context(scorecard=replace(card("1.8", "1.1"), order_outcomes=OUTCOMES)))
+
+    assert "After your executed orders (to this review, computed by the system):" in text
+    assert "- 2026-09-15 BUY 10 NVDA at 120.00: now 131.00, +9.2%, in 5 trading days (SPY +2.1% over the same days)" in text
+    assert (
+        "- 2026-09-16 SELL 5 AAPL at 180.00: now 192.00, +6.7% since you sold, in 4 trading days "
+        "(SPY +1.8% over the same days)"
+    ) in text
+    assert "- 2026-09-25 BUY 1 AMD at 100.00: price now unavailable, in 1 trading day (SPY unavailable)" in text
+
+
+def test_the_scorecard_shows_the_unbought_watchlist_stocks():
+    moves = (StockMove("AMD", Decimal("11.44")), StockMove("TSLA", None))
+
+    text = render_review_input(context(scorecard=replace(card("1.8", "1.1"), unbought=moves)))
+
+    assert "Watchlist stocks you did not buy in this period (move over the period; SPY +1.10%):" in text
+    assert "- AMD +11.4%, TSLA unavailable" in text
+
+
+def test_the_scorecard_shows_each_trading_day_with_its_last_summary():
+    text = render_review_input(context(scorecard=replace(card("1.8", "1.1"), days=DAYS)))
+
+    assert "Your trading days in this period (counts, then the day's last summary):" in text
+    assert (
+        '- 2026-09-15: 26 runs: 1 buy, 1 rejected order, 25 held. Last: "Held; TSLA is above the sell line."'
+    ) in text
+    assert "- 2026-09-16: 1 run: 1 held. Last: none" in text
 
 
 def test_every_order_is_listed_with_its_section_result_and_reason():

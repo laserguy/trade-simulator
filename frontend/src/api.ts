@@ -1,11 +1,13 @@
 // Typed client for the FastAPI backend (backend/src/trade_simulator/adapters/web/api.py).
-import type { Bar, HistoryPoint, RunTrades, Trade } from './chart'
+import type { Bar, HistoryPoint, HomePeriod, RunTrades, Trade } from './chart'
 
-export type { HistoryPoint, RunTrades }
+export type { HistoryPoint, HomePeriod, RunTrades }
 
-// Value chart points and each run's executed trades, for the Home chart's markers (D32, D33).
+// Value chart points, the live "now" point that ends the chart (null when prices are unavailable),
+// and each run's executed trades, for the Home chart's markers (D32, D33).
 export interface ValueHistory {
   points: HistoryPoint[]
+  now: HistoryPoint | null
   trades: RunTrades[]
 }
 
@@ -247,7 +249,7 @@ export const api = {
   portfolio: () => request<Portfolio>('/api/portfolio'),
   watchlist: () => request<Watchlist | null>('/api/watchlist'),
   runs: (limit = 50) => request<Run[]>(`/api/runs?limit=${limit}`),
-  history: () => request<ValueHistory>('/api/history'),
+  history: (period: HomePeriod) => request<ValueHistory>(`/api/history?period=${period}`),
   activity: () => request<Activity>('/api/activity'),
   priceHistory: (symbol: string, period: ChartPeriod) =>
     request<PriceHistory>(`/api/price-history/${encodeURIComponent(symbol)}?period=${period}`),

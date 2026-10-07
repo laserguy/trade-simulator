@@ -4,6 +4,7 @@ import {
   api,
   ApiError,
   type Activity,
+  type HomePeriod,
   type Portfolio,
   type Run,
   type Settings,
@@ -33,7 +34,9 @@ export default function App() {
   const [page, setPage] = useState<Page>('home')
   const [status, setStatus] = useState<Status | null>(null)
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
-  const [history, setHistory] = useState<ValueHistory>({ points: [], trades: [] })
+  const [history, setHistory] = useState<ValueHistory>({ points: [], now: null, trades: [] })
+  const [homePeriod, setHomePeriod] = useState<HomePeriod>('1M') // Home chart period (D32)
+  const homePeriodRef = useRef<HomePeriod>('1M')
   const [openRunId, setOpenRunId] = useState<string | null>(null)
   const [watchlist, setWatchlist] = useState<Watchlist | null>(null)
   const [runs, setRuns] = useState<Run[]>([])
@@ -51,7 +54,7 @@ export default function App() {
     try {
       const [p, h, w, r, s, st] = await Promise.all([
         api.portfolio(),
-        api.history(),
+        api.history(homePeriodRef.current),
         api.watchlist(),
         api.runs(),
         api.settings(),
@@ -219,6 +222,13 @@ export default function App() {
             <Home
               portfolio={portfolio}
               history={history}
+              period={homePeriod}
+              onPeriod={(p) => {
+                // Reload everything, so the chart's "now" and the numbers above it stay the same moment.
+                homePeriodRef.current = p
+                setHomePeriod(p)
+                void loadData()
+              }}
               runs={runs}
               running={running}
               onOpenLog={(runId) => {

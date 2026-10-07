@@ -1,4 +1,5 @@
 // Display helpers. The API sends money and percentages as decimal strings to avoid float drift.
+import type { HomePeriod } from './chart'
 
 const DASH = '—'
 
@@ -33,6 +34,21 @@ export function comparisonText(agentReturn: string | null, benchmarkReturn: stri
   return gap > 0
     ? `Ahead of ${benchmark} by ${gap.toFixed(2)} pts`
     : `Behind ${benchmark} by ${Math.abs(gap).toFixed(2)} pts`
+}
+
+const PERIOD_NAMES: Record<HomePeriod, string> = {
+  '1W': 'Last week',
+  '1M': 'Last month',
+  '3M': 'Last 3 months',
+  ALL: 'Since start',
+}
+
+// The line under the Home chart's period buttons (D32).
+export function periodResultText(period: HomePeriod, change: { agent: string; benchmark: string }, benchmark: string): string {
+  return (
+    `${PERIOD_NAMES[period]}: Agent ${formatPercent(change.agent)}, ${benchmark} ${formatPercent(change.benchmark)} · ` +
+    comparisonText(change.agent, change.benchmark, benchmark)
+  )
 }
 
 // Web search is described without naming the provider (D34, D35).

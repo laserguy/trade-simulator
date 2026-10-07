@@ -36,11 +36,14 @@ from trade_simulator.core.strategy_review import (
     ClosedTrade,
     Followed,
     HoldingResult,
+    OrderOutcome,
     ReviewDecision,
     ReviewTrigger,
     Scorecard,
+    StockMove,
     StrategyReview,
     TargetsVerdict,
+    TradingDay,
 )
 from trade_simulator.core.trading_rules import OrderResult, OrderStatus, RejectionReason
 
@@ -638,6 +641,32 @@ def _scorecard_to_json(card: Scorecard) -> dict:
         "average_cash_percent": str(card.average_cash_percent),
         "followed_orders": card.followed_orders,
         "deviations": card.deviations,
+        "order_outcomes": [
+            {
+                "at": _to_iso(o.at),
+                "side": o.side.value,
+                "quantity": o.quantity,
+                "symbol": o.symbol,
+                "price": str(o.price),
+                "price_now": _optional_text(o.price_now),
+                "trading_days": o.trading_days,
+                "benchmark_percent": _optional_text(o.benchmark_percent),
+            }
+            for o in card.order_outcomes
+        ],
+        "unbought": [[m.symbol, _optional_text(m.percent)] for m in card.unbought],
+        "days": [
+            {
+                "day": d.day.isoformat(),
+                "runs": d.runs,
+                "buys": d.buys,
+                "sells": d.sells,
+                "rejected": d.rejected,
+                "held": d.held,
+                "last_summary": d.last_summary,
+            }
+            for d in card.days
+        ],
     }
 
 
@@ -655,7 +684,33 @@ def _scorecard_from_json(data: dict) -> Scorecard:
         average_cash_percent=Decimal(data["average_cash_percent"]),
         followed_orders=data["followed_orders"],
         deviations=data["deviations"],
+        # Scorecards saved before these were added have none.
+        order_outcomes=tuple(
+            OrderOutcome(
+                at=_from_iso(o["at"]),
+                side=Side(o["side"]),
+                quantity=o["quantity"],
+                symbol=o["symbol"],
+                price=Decimal(o["price"]),
+                price_now=_optional_decimal(o["price_now"]),
+                trading_days=o["trading_days"],
+                benchmark_percent=_optional_decimal(o["benchmark_percent"]),
+            )
+            for o in data.get("order_outcomes", [])
+        ),
+        unbought=tuple(StockMove(symbol, _optional_decimal(percent)) for symbol, percent in data.get("unbought", [])),
+        days=tuple(
+            TradingDay(**{**d, "day": date.fromisoformat(d["day"])}) for d in data.get("days", [])
+        ),
     )
+
+
+def _optional_text(value: Decimal | None) -> str | None:
+    return None if value is None else str(value)
+
+
+def _optional_decimal(value: str | None) -> Decimal | None:
+    return None if value is None else Decimal(value)
 
 
 def _to_iso(value: datetime) -> str:

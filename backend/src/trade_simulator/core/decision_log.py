@@ -9,6 +9,7 @@ from trade_simulator.core.errors import DomainError
 from trade_simulator.core.trading_rules import OrderResult
 
 MAX_WATCHLIST_SIZE = 20
+OVERALL = "OVERALL"  # the finding that holds a trading run's summary (D22)
 
 
 class RunTrigger(Enum):

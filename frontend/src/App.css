@@ -125,6 +125,9 @@ ul.plain { list-style: none; padding: 0; margin: 0 0 8px; font-size: 14px; displ
 .chart { width: 100%; height: 160px; display: block; overflow: visible; }
 .line-agent { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .line-bench { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+/* The live stretch to "now" (D32): lighter, and broken differently from the saved line. */
+.line-agent.live { stroke-dasharray: 5 4; opacity: 0.5; }
+.line-bench.live { stroke-dasharray: 2 4; opacity: 0.5; }
 .chart-axis { display: flex; justify-content: space-between; margin-top: 6px; }
 .legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .swatch { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--accent); }
@@ -157,6 +160,19 @@ tr.chart-row td { background: var(--surface-2); padding: 4px 8px 12px; }
 .value-marker.buy { background: var(--up); }
 .value-marker.sell { background: var(--down); }
 .value-marker.mixed { background: linear-gradient(90deg, var(--up) 50%, var(--down) 50%); }
+/* Home chart period buttons, period result and hover readout (D32). */
+.chart-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 8px; }
+.chart-wrap { touch-action: pan-y; }
+.hover-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--border); pointer-events: none; }
+.readout {
+  position: absolute; top: 0; margin-left: 10px; min-width: 190px; max-width: min(260px, 70vw); padding: 8px 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  pointer-events: none; z-index: 2;
+}
+.readout.flip { transform: translateX(-100%); margin-left: -10px; }
+.readout-head { font-weight: 600; margin-bottom: 4px; }
+.readout-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; }
+.readout-trades { margin: 6px 0 0; font-size: 12px; }
 
 .mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mode-card { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border); border-radius: 10px;

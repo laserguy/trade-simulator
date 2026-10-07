@@ -2,11 +2,12 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
 from trade_simulator.core.decision_log import RunCost, RunStatus
+from trade_simulator.core.order import Side
 from trade_simulator.core.strategy import StrategySection
 
 
@@ -58,6 +59,46 @@ class HoldingResult:
 
 
 @dataclass(frozen=True)
+class OrderOutcome:
+    """What a stock did after an executed order, up to the review (D43). For a sell, the move since selling."""
+
+    at: datetime  # when its run started
+    side: Side
+    quantity: int
+    symbol: str
+    price: Decimal  # the executed price
+    price_now: Decimal | None  # None when no price was available
+    trading_days: int  # closes between the order and the review
+    benchmark_percent: Decimal | None  # the benchmark over the same span; None when unknown
+
+    @property
+    def change_percent(self) -> Decimal | None:
+        return None if self.price_now is None else (self.price_now - self.price) / self.price * 100
+
+
+@dataclass(frozen=True)
+class StockMove:
+    """A watchlist stock not bought in the period, and how it moved over the period (D43)."""
+
+    symbol: str
+    percent: Decimal | None  # None when a price was unavailable
+
+
+@dataclass(frozen=True)
+class TradingDay:
+    """One trading day of the period: what its completed runs did, and the day's last summary (D43).
+    Failed runs are left out: they are technical problems, not decisions."""
+
+    day: date
+    runs: int
+    buys: int
+    sells: int
+    rejected: int
+    held: int  # runs that executed nothing
+    last_summary: str  # the day's last run's summary; empty if it had none
+
+
+@dataclass(frozen=True)
 class Scorecard:
     """A strategy version's results over its period, computed by code, never by the agent."""
 
@@ -73,6 +114,10 @@ class Scorecard:
     average_cash_percent: Decimal
     followed_orders: int
     deviations: int
+    # Added for the review only (not shown on the Strategy tab); empty on older saved scorecards.
+    order_outcomes: tuple[OrderOutcome, ...] = ()
+    unbought: tuple[StockMove, ...] = ()
+    days: tuple[TradingDay, ...] = ()
 
 
 @dataclass(frozen=True)

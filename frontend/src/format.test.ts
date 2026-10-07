@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, moveTone, signClass, tokens, tradingRuleLines } from './format'
+import { allowanceText, comparisonText, formatExchangeTime, formatMoney, formatPercent, formatUsdCost, moveTone, periodResultText, signClass, tokens, tradingRuleLines } from './format'
 
 describe('tradingRuleLines', () => {
   it('states every rule in plain words, with the enforced fee and cap', () => {
@@ -49,6 +49,20 @@ describe('formatUsdCost', () => {
     expect(formatUsdCost('0.0042')).toBe('$0.0042')
     expect(formatUsdCost('1.5000')).toBe('$1.50')
     expect(formatUsdCost(null)).toBe('—')
+  })
+})
+
+describe('periodResultText', () => {
+  it('names the period and compares both lines', () => {
+    expect(periodResultText('1M', { agent: '0.80', benchmark: '1.10' }, 'SPY')).toBe(
+      'Last month: Agent +0.80%, SPY +1.10% · Behind SPY by 0.30 pts',
+    )
+  })
+
+  it('calls the whole history "since start"', () => {
+    expect(periodResultText('ALL', { agent: '1.32', benchmark: '1.00' }, 'SPY')).toBe(
+      'Since start: Agent +1.32%, SPY +1.00% · Ahead of SPY by 0.32 pts',
+    )
   })
 })
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from trade_simulator.adapters.text_links import keep_known, merge_sources, split_links
 from trade_simulator.application.ports import AgentUsage, Quote, ReviewProposal
-from trade_simulator.core.decision_log import Finding, WatchlistEntry
+from trade_simulator.core.decision_log import OVERALL, Finding, WatchlistEntry
 from trade_simulator.core.errors import InvalidOrderError
 from trade_simulator.core.order import Order, Side
 from trade_simulator.core.strategy import Strategy, StrategySection
@@ -143,7 +143,7 @@ def to_market_overview(result: WatchlistResult, known_urls: set[str]) -> Finding
 
 def to_decision_summary(decision: TradingDecision) -> Finding:
     summary, _ = split_links(decision.summary)
-    return Finding("OVERALL", summary)
+    return Finding(OVERALL, summary)
 
 
 def to_watchlist_entries(result: WatchlistResult, known_urls: set[str]) -> list[WatchlistEntry]:

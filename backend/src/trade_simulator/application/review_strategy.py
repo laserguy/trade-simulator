@@ -6,8 +6,11 @@ A failed review is logged and leaves the strategy as it was.
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from trade_simulator.application.activity import NoActivity
 from trade_simulator.application.portfolio_setup import load_or_create_portfolio
@@ -23,6 +26,7 @@ from trade_simulator.application.ports import (
 )
 from trade_simulator.application.run_cost import cost_of
 from trade_simulator.application.run_guard import RunGuard
+from trade_simulator.application.strategy_outcomes import last_close, order_outcomes, trading_days, unbought_moves
 from trade_simulator.application.strategy_scorecard import build_scorecard
 from trade_simulator.application.strategy_timing import ReviewTiming, review_timing
 from trade_simulator.core.decision_log import RunStatus
@@ -158,18 +162,42 @@ class StrategyReviewRunner:
         portfolio = load_or_create_portfolio(self._repository, self._profile)
         watchlist = self._repository.load_watchlist()
         symbols = set(portfolio.positions) | (watchlist.symbols if watchlist else set())
-        prices = self._market_data.get_prices(sorted(symbols)) if symbols else {}
         runs = self._repository.runs_following(current.number) if current else []
+        # One price request: also the stocks sold in the period and the benchmark, for the outcomes.
+        traded = {result.order.symbol for run in runs for result in run.order_results}
+        wanted = symbols | traded | ({self._profile.benchmark_symbol} if current else set())
+        all_prices = self._market_data.get_prices(sorted(wanted)) if wanted else {}
+        prices = {symbol: price for symbol, price in all_prices.items() if symbol in symbols}
         scorecard = None
         if current:
+            snapshots = self._repository.load_value_snapshots()
             scorecard = build_scorecard(
                 version=current,
                 runs=runs,
                 trades=self._repository.executed_trades(),
-                snapshots=self._repository.load_value_snapshots(),
+                snapshots=snapshots,
                 portfolio=portfolio,
                 prices=prices,
                 now=now,
+            )
+            scorecard = replace(
+                scorecard,
+                order_outcomes=order_outcomes(
+                    runs=runs,
+                    snapshots=snapshots,
+                    prices=all_prices,
+                    benchmark_now=all_prices.get(self._profile.benchmark_symbol),
+                    calendar=self._calendar,
+                    now=now,
+                ),
+                unbought=unbought_moves(
+                    watchlist=[entry.symbol for entry in watchlist.entries] if watchlist else [],
+                    runs=runs,
+                    held=portfolio.positions,
+                    start_prices=self._closes_at(watchlist.symbols if watchlist else set(), current.started_at),
+                    prices=all_prices,
+                ),
+                days=trading_days(runs, self._profile.timezone),
             )
         return ReviewContext(
             profile=self._profile,
@@ -185,6 +213,17 @@ class StrategyReviewRunner:
             versions=tuple(self._repository.strategy_versions()),
             reviews=tuple(r for r in self._repository.strategy_reviews() if r.status is RunStatus.COMPLETED),
         )
+
+    def _closes_at(self, symbols: set[str], moment: datetime) -> dict[str, Decimal]:
+        """Each stock's closing price at the last close at or before `moment`, from the cached price history (D36).
+        Stocks without a cached bar for that day are left out."""
+        day = last_close(self._calendar, moment).astimezone(ZoneInfo(self._profile.timezone)).date()
+        closes = {}
+        for symbol in symbols:
+            bars = self._repository.load_daily_bars(self._profile.code, symbol, day)
+            if bars and bars[0].day == day:
+                closes[symbol] = bars[0].close
+        return closes
 
     def _failed(
         self,

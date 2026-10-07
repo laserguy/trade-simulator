@@ -1,14 +1,16 @@
 """The text a strategy review starts from (D43): portfolio, market, the current strategy, its scorecard,
-its orders, and every earlier version with the reasons it was kept or changed."""
+its orders, what happened after them and on each trading day, and every earlier version with the reasons
+it was kept or changed."""
 
 from decimal import Decimal
 
 from trade_simulator.adapters.openai_agents.inputs import strategy_lines
 from trade_simulator.application.ports import ReviewContext, ReviewedOrder
 from trade_simulator.core.decision_log import Watchlist
+from trade_simulator.core.order import Side
 from trade_simulator.core.portfolio import Portfolio
 from trade_simulator.core.strategy import StrategySection, StrategyVersion
-from trade_simulator.core.strategy_review import ReviewDecision, Scorecard, StrategyReview
+from trade_simulator.core.strategy_review import OrderOutcome, ReviewDecision, Scorecard, StrategyReview, TradingDay
 from trade_simulator.core.trading_rules import OrderStatus
 
 
@@ -26,6 +28,7 @@ def render_review_input(context: ReviewContext) -> str:
     lines += strategy_lines(current, indent="")
     lines += _scorecard(current, context.scorecard, currency)
     lines += _orders(context.orders)
+    lines += _since_then(context.scorecard)
     lines += _history(context)
     return "\n".join(lines)
 
@@ -97,6 +100,61 @@ def _orders(orders: tuple[ReviewedOrder, ...]) -> list[str]:
             f'({basis}): {outcome}. Reason: "{order.reason}"'
         )
     return lines
+
+
+def _since_then(card: Scorecard | None) -> list[str]:
+    """What happened after the orders, the stocks not bought, and each trading day: part of the saved scorecard."""
+    if card is None:
+        return []
+    lines = ["", "After your executed orders (to this review, computed by the system):"]
+    lines += [_outcome_line(outcome) for outcome in card.order_outcomes] or ["- none"]
+    moves = ", ".join(
+        f"{m.symbol} {m.percent:+.1f}%" if m.percent is not None else f"{m.symbol} unavailable" for m in card.unbought
+    )
+    lines += [
+        "",
+        f"Watchlist stocks you did not buy in this period (move over the period; SPY {card.benchmark_percent:+.2f}%):",
+        f"- {moves or 'none'}",
+        "",
+        "Your trading days in this period (counts, then the day's last summary):",
+    ]
+    lines += [_day_line(day) for day in card.days] or ["- none"]
+    return lines
+
+
+def _outcome_line(outcome: OrderOutcome) -> str:
+    change = outcome.change_percent
+    if change is None:
+        move = "price now unavailable"
+    else:
+        since = " since you sold" if outcome.side is Side.SELL else ""
+        move = f"now {outcome.price_now:,.2f}, {change:+.1f}%{since}"
+    days = _count(outcome.trading_days, "trading day")
+    benchmark = (
+        f"SPY {outcome.benchmark_percent:+.1f}% over the same days"
+        if outcome.benchmark_percent is not None
+        else "SPY unavailable"
+    )
+    return (
+        f"- {outcome.at.date().isoformat()} {outcome.side.value.upper()} {outcome.quantity} {outcome.symbol} "
+        f"at {outcome.price:,.2f}: {move}, in {days} ({benchmark})"
+    )
+
+
+def _day_line(day: TradingDay) -> str:
+    counts = [
+        _count(day.buys, "buy"),
+        _count(day.sells, "sell"),
+        _count(day.rejected, "rejected order"),
+        f"{day.held} held",
+    ]
+    shown = ", ".join(c for c in counts if not c.startswith("0 "))
+    last = f'"{day.last_summary}"' if day.last_summary else "none"
+    return f"- {day.day.isoformat()}: {_count(day.runs, 'run')}: {shown}. Last: {last}"
+
+
+def _count(number: int, noun: str) -> str:
+    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
 
 
 def _history(context: ReviewContext) -> list[str]:

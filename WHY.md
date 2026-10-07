@@ -512,6 +512,20 @@
 - **Why:** The user asked what "prediction came true" meant; "targets" says the same thing more plainly. The targets are still set before the results exist, so the strategy is judged against what it promised. The verdict is the agent's judgement against the code's scorecard, not a code check (the targets are plain words); the user sees both in the history.
 - **Alternatives considered:** Keeping "prediction" (unclear); numeric targets checked by code (would turn section 5 into a form, as with the rejected code-enforced numbers).
 
+**Update (2026-10-07): what happened after the trades, and the holds**
+- **Choice:** The review's scorecard adds each order's move up to the review against SPY over the same days (for sells, the move since selling), the move of each watchlist stock not bought, and one line per trading day (counts, and that day's last run summary). Computed by code, saved with the scorecard, not shown on screen for now.
+- **Why:**
+  - **Outcomes, not just results:** the scorecard showed the gain on each sale, but not whether selling was early, or whether the stocks it passed on did better. Without that the agent can't tell a bad buying rule from a bad selling rule.
+  - **Holds were invisible:** only orders reached the review, so a sell rule that should have fired but didn't couldn't be caught in "was it followed?".
+  - **Code, not the agent:** it is arithmetic on stored prices; code is exact, free and can't be argued with (same reason as the scorecard).
+  - **Up to the review, with the days shown:** simple and always available; showing the days and SPY's move stops a one-day-old order looking like a verdict.
+  - **One line per day, not per run:** in 15-minute mode a week has about 130 runs, mostly identical holds; per day keeps it to about ten lines in any mode. The day's last summary is the agent's latest view of its holdings. Runs that traded are already covered by the orders and their reasons.
+  - **Failed runs left out:** they come from tool or connection problems, not decisions, and would push the strategy to react to limits that may change.
+  - **Saved, not recomputed:** "now" prices are only true on the review day, and history may be corrected later.
+  - **Review only:** trading runs are unchanged; the facts reach trading through the strategy the review writes.
+- **Alternatives considered:** The agent working this out from raw prices (costly, error-prone, open to self-serving reading); a fixed span such as 5 days after each order (recent orders get no number); every run's summary (thousands of words in 15-minute mode); recomputing on demand (drifts from what the agent saw); showing it on the Strategy tab now (needs a layout agreed first; can follow later).
+- **Date:** 2026-10-07
+
 ---
 
 ## UI design
@@ -579,8 +593,21 @@ Research input (2026-09-26): Alpha Arena (nof1.ai), where AI models trade $10k l
   - It matches the Watchlist charts' buy/sell markers (D37), so both charts read the same way.
   - Trades come with `/api/history` instead of from the loaded runs, which stop at the latest 50, so older markers still show.
   - Alternatives considered: markers on every run, trading or not (noise, since most runs may hold); vertical lines across the chart (clutter the benchmark line); a separate trades strip under the chart (more space for the same information).
+- **Live "now" point (2026-10-07):** The chart ends with a point for the current moment, taken from the same prices as the three numbers. It is shown but not saved; saved points still come only from D33.
+  - The user saw the chart with SPY's line ending above the agent's while the boxes said the agent was ahead. Both were correct, but for different moments: the chart stopped at the last run (Oct 6), and the numbers were live (Oct 7).
+  - Showing the same moment in both removes the cause. A note like "Graph as of last run" would only explain the gap.
+  - The last stretch is lighter and dashed because it will move as prices change; the rest is saved history. (SPY's line is already dashed, so lighter is what sets its live stretch apart.)
+  - Alternatives considered: a note under the chart (a workaround, the two still disagree); saving a point on every page view (rejected in D33: irregular points and extra price calls).
+- **Period buttons and hover (2026-10-07):**
+  - The chart gets a point after every run, about 500 a year in Daily mode and 6,700 in Every-15-minutes mode. Drawn all at once, the lines blur and the trade markers pile up.
+  - Buttons match the Watchlist charts (D37), so both charts work the same way. 1M is the default because it shows recent decisions with enough history to judge them.
+  - One point per day beyond 1W keeps a year at about 250 points. 1W keeps every run so each decision's effect is visible.
+  - Hover gives exact numbers without crowding the chart, and shows who was ahead at any moment, the question that started this change.
+  - The three numbers stay "since start" because that is the main score. The period line answers "how did this month go" without replacing it.
+  - Even spacing is kept: spacing by real time would make nights and weekends long empty stretches.
+  - Alternatives considered: always showing everything, thinned (recent days squashed); a fixed last-month window (full history never visible); every run in every period (unreadable in 15-minute mode); one point per day everywhere (loses each run's effect); numbers that follow the period (the since-start score disappears).
 - **Alternatives considered:** A classic brokerage home, portfolio first with the AI on its own tab (the draft; the AI less central); no chart for v1 (less to build, but loses the main visual).
-- **Date:** 2026-09-26 (trade markers added 2026-09-30)
+- **Date:** 2026-09-26 (trade markers added 2026-09-30, live "now" point 2026-10-07, period buttons and hover 2026-10-07)
 
 ### D33: Record value history for the chart
 - **Choice:** Save portfolio value and the SPY price after every run and once per trading day at the close.

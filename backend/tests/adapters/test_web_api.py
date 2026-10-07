@@ -300,6 +300,7 @@ def test_history_endpoint_returns_value_points(tmp_path):
 
     assert client.get("/api/history").json() == {
         "points": [{"at": NOW.isoformat(), "total_value": "10000.00", "benchmark_value": "10000.00"}],
+        "now": {"at": NOW.isoformat(), "total_value": "10000.00", "benchmark_value": "10000.00"},
         "trades": [],
     }
 
@@ -328,6 +329,28 @@ def test_history_endpoint_groups_executed_trades_by_run(tmp_path):
             ],
         }
     ]
+
+
+def test_history_endpoint_keeps_trades_inside_the_period(tmp_path):
+    client, services = build(tmp_path)
+    for run_id, at in (("old", NOW - timedelta(days=40)), ("new", NOW)):
+        order = OrderResult(Order("AAPL", Side.BUY, 1, "x"), OrderStatus.EXECUTED, Decimal("200"), Decimal("1"))
+        services.repository.save_run(
+            DecisionRun(
+                id=run_id, trigger=RunTrigger.MANUAL, started_at=at, finished_at=at, status=RunStatus.COMPLETED,
+                failure_reason=None, findings=(), order_results=(order,), cost=RunCost(0, 0, 0), trace_id=None,
+            ),
+            None,
+        )
+
+    assert [t["run_id"] for t in client.get("/api/history").json()["trades"]] == ["new"]
+    assert [t["run_id"] for t in client.get("/api/history?period=ALL").json()["trades"]] == ["old", "new"]
+
+
+def test_history_endpoint_rejects_an_unknown_period(tmp_path):
+    client, _ = build(tmp_path)
+
+    assert client.get("/api/history?period=5Y").status_code == 400
 
 
 def test_activity_endpoint_returns_the_live_timeline(tmp_path):

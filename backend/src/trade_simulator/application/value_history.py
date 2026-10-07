@@ -3,8 +3,9 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from trade_simulator.application.portfolio_view import PortfolioViewer
 from trade_simulator.application.ports import Repository, ValueSnapshot
@@ -47,12 +48,31 @@ class ValueHistory:
             ValueSnapshot(self._clock(), snapshot.total_value, snapshot.benchmark_price, snapshot.cash)
         )
 
-    def points(self) -> list[ValuePoint]:
+    def now(self) -> ValuePoint | None:
+        """The live point that ends the chart (D32): same prices as the Home numbers, never saved.
+        None when prices are unavailable or tracking hasn't started."""
+        snapshot = self._viewer.snapshot()
+        start = self._repository.load_benchmark_start()
+        if snapshot.total_value is None or snapshot.benchmark_price is None or start is None:
+            return None
+        capital = self._profile.starting_capital
+        return ValuePoint(self._clock(), snapshot.total_value, capital * snapshot.benchmark_price / start.price)
+
+    def since(self, days: int | None) -> datetime | None:
+        """Start of a chart period of `days` days back from now (None = all history)."""
+        return None if days is None else self._clock() - timedelta(days=days)
+
+    def points(self, days: int | None = None, daily: bool = False) -> list[ValuePoint]:
+        """Saved points, optionally only the last `days` days, and with `daily` only the last point
+        of each day in the exchange's timezone, so long periods stay readable (D32)."""
         start = self._repository.load_benchmark_start()
         if start is None:
             return []
+        since = self.since(days)
+        snapshots = [s for s in self._repository.load_value_snapshots() if since is None or s.at >= since]
+        if daily:
+            zone = ZoneInfo(self._profile.timezone)
+            last_of_day = {s.at.astimezone(zone).date(): s for s in snapshots}
+            snapshots = list(last_of_day.values())
         capital = self._profile.starting_capital
-        return [
-            ValuePoint(s.at, s.total_value, capital * s.benchmark_price / start.price)
-            for s in self._repository.load_value_snapshots()
-        ]
+        return [ValuePoint(s.at, s.total_value, capital * s.benchmark_price / start.price) for s in snapshots]
