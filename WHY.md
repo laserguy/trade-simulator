@@ -425,7 +425,7 @@
 - **Alternatives considered:** A prompt line telling the Trading Agent to include the reasons (unreliable); leaving the Research Agent without them (it cannot check a reason it was never given).
 
 ### D43: The Trading Agent writes and revises its own strategy, in a separate review
-- **Choice:** The Trading Agent owns its strategy. It writes and revises it in a **strategy review**, a step separate from the trading run, with its own prompt file and the same model; trading runs follow the current version. The code computes each version's results and the agent judges them. No evaluator agent and no internet search for strategies for now. Being designed one decision at a time; not built.
+- **Choice:** The Trading Agent owns its strategy. It writes and revises it in a **strategy review**, a step separate from the trading run, with its own prompt file and the same model; trading runs follow the current version. The code computes each version's results and the agent judges them. No evaluator agent and no internet search for strategies for now.
 - **Why:**
   - **The agent that follows the strategy should write it.** It explains each trade against the strategy, so it is accountable for both. If another agent wrote it, a bad result could be blamed on the strategy or on how it was followed, with no way to tell which. This also matches D41: how to invest is for the agent to develop.
   - **Fits multiple agents later (D39):** each competing agent should be judged on its own thinking, strategy included. A separate strategist would need one copy per agent on the same model, or the comparison gets muddied.

@@ -37,6 +37,8 @@ Or use the command line:
 uv run trade-sim status    # market open/closed, cash, holdings, watchlist, recent runs
 uv run trade-sim refresh   # rebuild the watchlist (any time)
 uv run trade-sim run       # one decision run (market hours only)
+uv run trade-sim review    # write the first strategy, or review it once the minimum period is over
+uv run trade-sim agent-map # refresh the numbers in docs/agent-map.html
 ```
 
 ## Technologies used
@@ -79,15 +81,15 @@ A run works like this: **the agent proposes, the code checks.** The Trading Agen
 │   │   ├── core/           # domain: portfolio, orders, trading rules, run budget, exchange profile
 │   │   ├── application/    # use cases + ports.py (interfaces)
 │   │   ├── adapters/       # SQLite, Finnhub, Tavily, Tiingo, calendar, openai_agents/, web/api.py, bootstrap.py
-│   │   └── cli.py          # trade-sim serve | status | refresh | run
-│   ├── prompts/            # agent prompts as Markdown (trading, research, watchlist refresh)
+│   │   └── cli.py          # trade-sim serve | status | refresh | run | review | agent-map
+│   ├── prompts/            # agent prompts as Markdown (trading, research, watchlist refresh, strategy review)
 │   ├── tests/              # mirrors src: core/, application/, adapters/, integration/ (opt-in)
 │   ├── model_catalogue.json        # models and prices shown in Settings
 │   ├── mcp_servers.example.json    # optional MCP servers for the agents
 │   └── .env.example
 └── frontend/src/
     ├── App.tsx, api.ts, chart.ts, format.ts
-    └── components/         # Home, RunLog, LiveRun, WatchlistView, PriceChart, SettingsView, RunModeSection
+    └── components/         # Home, RunLog, LiveRun, WatchlistView, PriceChart, StrategyView, SettingsView, RunModeSection
 ```
 
 Runtime files are git-ignored: the database is `backend/data/trade_simulator.sqlite3` (delete it to start fresh), and the log is `backend/logs/app.log`, with API keys scrubbed.
